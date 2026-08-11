@@ -1,0 +1,48 @@
+[project]
+name = "fpl"
+version = "0.1.0"
+description = "EPL Fantasy Premier League Team Creator & Recommendation Engine"
+readme = "README.md"
+authors = [
+    { name = "Aritra Dattagupta", email = "dattagupta.aritra@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "fastapi>=0.141.1",
+    "httpx>=0.28.1",
+    "pandas>=3.0.5",
+    "pulp>=3.3.2",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.15.0",
+    "rich>=15.0.0",
+    "scikit-learn>=1.9.0",
+    "uvicorn>=0.52.1",
+]
+
+[project.scripts]
+fpl = "fpl:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.0",
+    "pandas-stubs>=3.0.5.260730",
+    "pylint>=4.0.7",
+    "pytest>=9.1.1",
+]
+
+[tool.pylint.main]
+init-hook = "import sys; sys.path.append('src')"
+max-line-length = 120
+disable = [
+    "too-many-locals",
+    "too-many-arguments",
+    "too-many-positional-arguments",
+    "too-many-branches",
+    "too-many-statements",
+    "duplicate-code",
+]

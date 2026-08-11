@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environment & tool caches
+.venv/
+venv/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# uv
+.python-version
+
+# Data (large historical repository & sqlite databases — not tracked in git)
+data/historical/
+data/snapshots/
+*.parquet
+*.db
+*.sqlite
+
+# Analysis output
+analysis/output/
+
+# Environment
+.env
+.env.*
+
+# Jupyter
+.ipynb_checkpoints/
