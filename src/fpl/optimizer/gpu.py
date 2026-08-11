@@ -45,15 +45,6 @@ def simulate_scenarios_gpu(
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Accelerate Monte Carlo match scenario simulation using NVIDIA CUDA GPU tensors.
-
-    Parameters:
-        base_xp: 1D array of player baseline xP
-        expected_mins: 1D array of player expected minutes
-        num_scenarios: Number of Monte Carlo scenario iterations (default 1000)
-        use_gpu: Enable CUDA acceleration if available
-
-    Returns:
-        (mean_xp_array, variance_xp_array)
     """
     device_info = get_device_info()
     if use_gpu and device_info["gpu_available"]:
@@ -61,18 +52,16 @@ def simulate_scenarios_gpu(
         xp_tensor = torch.tensor(base_xp, dtype=torch.float32, device=device).unsqueeze(1)
         mins_tensor = torch.tensor(expected_mins, dtype=torch.float32, device=device).unsqueeze(1)
 
-        # Generate normal minutes noise & gamma performance noise on GPU CUDA
         num_players = len(base_xp)
         mins_noise = torch.randn((num_players, num_scenarios), device=device) * 15.0 + mins_tensor
         mins_clipped = torch.clamp(mins_noise, 0.0, 90.0)
 
-        # Gamma noise approximation on GPU
-        perf_noise = torch.randn((num_players, num_scenarios), device=device).abs() * 0.5 + 0.5
-        scenarios = (mins_clipped / 90.0) * xp_tensor * perf_noise
+        gpu_perf_noise = torch.randn((num_players, num_scenarios), device=device).abs() * 0.5 + 0.5
+        scenarios = (mins_clipped / 90.0) * xp_tensor * gpu_perf_noise
 
-        mean_xp = torch.mean(scenarios, dim=1).cpu().numpy()
-        var_xp = torch.var(scenarios, dim=1).cpu().numpy()
-        return mean_xp, var_xp
+        mean_res: np.ndarray = torch.mean(scenarios, dim=1).cpu().numpy()
+        var_res: np.ndarray = torch.var(scenarios, dim=1).cpu().numpy()
+        return mean_res, var_res
 
     # CPU Fallback
     rng = np.random.default_rng(seed=42)
@@ -88,3 +77,55 @@ def simulate_scenarios_gpu(
     mean_xp = np.mean(scenarios_cpu, axis=1)
     var_xp = np.var(scenarios_cpu, axis=1)
     return mean_xp, var_xp
+
+
+def evaluate_population_gpu(
+    population_matrix: np.ndarray,
+    xp_vector: np.ndarray,
+    cost_vector: np.ndarray,
+    budget: float = 100.0,
+    use_gpu: bool = True,
+) -> np.ndarray:
+    """
+    Vectorized CUDA GPU evaluation of population chromosome fitnesses.
+
+    Parameters:
+        population_matrix: 2D array (pop_size, 15) containing player index IDs
+        xp_vector: 1D array of expected points indexed by player position
+        cost_vector: 1D array of player costs indexed by player position
+        budget: Squad budget limit in £m
+        use_gpu: Enable CUDA acceleration if available
+
+    Returns:
+        1D array of fitness scores (pop_size,)
+    """
+    device_info = get_device_info()
+    pop_size, squad_size = population_matrix.shape
+
+    if use_gpu and device_info["gpu_available"]:
+        device = torch.device("cuda")
+        xp_t = torch.tensor(xp_vector, dtype=torch.float32, device=device)
+        cost_t = torch.tensor(cost_vector, dtype=torch.float32, device=device)
+        pop_t = torch.tensor(population_matrix, dtype=torch.long, device=device)
+
+        # Batch index lookup on GPU
+        pop_xp = xp_t[pop_t]  # Shape (pop_size, 15)
+        pop_cost = cost_t[pop_t]  # Shape (pop_size, 15)
+
+        total_xp = torch.sum(pop_xp, dim=1)
+        total_cost = torch.sum(pop_cost, dim=1)
+
+        # Vectorized constraint mask
+        valid_mask = total_cost <= budget
+        fitness_t = torch.where(valid_mask, total_xp, torch.tensor(0.0, device=device))
+        fit_res: np.ndarray = fitness_t.cpu().numpy()
+        return fit_res
+
+    # CPU Vectorized Fallback
+    fitnesses = np.zeros(pop_size)
+    for i in range(pop_size):
+        chrom = population_matrix[i]
+        cost = cost_vector[chrom].sum()
+        if cost <= budget and len(set(chrom)) == squad_size:
+            fitnesses[i] = xp_vector[chrom].sum()
+    return fitnesses

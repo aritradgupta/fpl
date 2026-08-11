@@ -2,12 +2,14 @@
 State-of-the-Art Hybrid Memetic Genetic Algorithm Solver for FPL Squad Optimization.
 
 Combines global evolutionary exploration with local hill-climbing search (Memetic GA):
+- PyTorch CUDA GPU Vectorized Batch Population Evaluation (NVIDIA RTX 4060)
+- Domain-Specific Heuristic Smart-Seeding (25% initial population seeded with top ICT/Form teams)
 - Elitism preservation (top E solutions copied unchanged)
 - 3-Way Tournament Selection (prevents premature convergence)
 - Position-Guided Structural Crossover (crosses over GKP, DEF, MID, FWD slots independently)
 - Adaptive Mutation & Simulated Annealing schedule (cools rate over generations)
+- Jaccard Distance Diversity Control & Stagnation Recovery
 - Lamarckian Local Search (greedy single-player hill-climbing on elite individuals)
-- Stagnation detection & diversity injection
 """
 
 import numpy as np
@@ -16,6 +18,7 @@ import pandas as pd
 from fpl.models.player import PlayerStats
 from fpl.models.squad import ChipType, SquadRecommendation
 from fpl.optimizer.expected_points import enrich_df_with_xp
+from fpl.optimizer.gpu import evaluate_population_gpu
 from fpl.optimizer.single_period import optimize_starting_xi_and_bench, prepare_players
 from fpl.rules.constraints import MAX_PER_TEAM, POSITION_LIMITS, SQUAD_SIZE, TOTAL_BUDGET
 
@@ -87,6 +90,61 @@ def _repair_squad_chromosome(
     return sorted(list(selected))
 
 
+def _seed_smart_population(
+    df: pd.DataFrame,
+    population_size: int,
+    budget: float,
+    club_limit: int,
+    rng: np.random.Generator,
+) -> list[list[int]]:
+    """
+    Seed initial population with domain-specific heuristic squads (top ICT, top form, top PPG).
+    """
+    smart_count = max(2, int(population_size * 0.25))
+    seeded_pop: list[list[int]] = []
+
+    # Rank metrics
+    top_ict = df.sort_values(by="ict_index", ascending=False).index.tolist() if "ict_index" in df.columns else []
+    top_form = df.sort_values(by="form", ascending=False).index.tolist() if "form" in df.columns else []
+    top_xp = df.sort_values(by="target_xp", ascending=False).index.tolist()
+
+    metric_pools = [top_xp, top_ict, top_form]
+
+    for m in range(smart_count):
+        pool = metric_pools[m % len(metric_pools)]
+        if not pool:
+            pool = top_xp
+
+        raw_pick: list[int] = []
+        for pos, required_cnt in POSITION_LIMITS.items():
+            pos_candidates = [i for i in pool if str(df.loc[i, "position"]) == pos]
+            raw_pick.extend(pos_candidates[:required_cnt])
+
+        repaired = _repair_squad_chromosome(raw_pick, df, budget, club_limit, rng)
+        seeded_pop.append(repaired)
+
+    return seeded_pop
+
+
+def _compute_jaccard_diversity(population: list[list[int]]) -> float:
+    """Compute average Jaccard distance diversity across population chromosomes."""
+    if len(population) < 2:
+        return 1.0
+    sample_size = min(15, len(population))
+    distances: list[float] = []
+
+    for i in range(sample_size):
+        for j in range(i + 1, sample_size):
+            s1 = set(population[i])
+            s2 = set(population[j])
+            intersection = len(s1.intersection(s2))
+            union = len(s1.union(s2))
+            jaccard_dist = 1.0 - (intersection / union) if union > 0 else 0.0
+            distances.append(jaccard_dist)
+
+    return float(np.mean(distances)) if distances else 1.0
+
+
 def _tournament_selection(
     population: list[list[int]],
     fitnesses: list[float],
@@ -110,8 +168,8 @@ def _position_guided_crossover(
     child2: list[int] = []
 
     for pos in ["GKP", "DEF", "MID", "FWD"]:
-        p1_pos = [i for i in parent1 if df.loc[i, "position"] == pos]
-        p2_pos = [i for i in parent2 if df.loc[i, "position"] == pos]
+        p1_pos = [i for i in parent1 if str(df.loc[i, "position"]) == pos]
+        p2_pos = [i for i in parent2 if str(df.loc[i, "position"]) == pos]
 
         if rng.random() < 0.5:
             child1.extend(p1_pos)
@@ -137,7 +195,6 @@ def _memetic_local_search(
     current_cost = float(df.loc[improved, "cost"].sum())
     team_counts: dict[str, int] = {str(k): int(v) for k, v in df.loc[improved, "team"].value_counts().to_dict().items()}
 
-    # Identify lowest-performing player
     lowest_i = min(improved, key=lambda i: float(str(df.loc[i, "target_xp"])))
     pos = str(df.loc[lowest_i, "position"])
     lowest_cost = float(str(df.loc[lowest_i, "cost"]))
@@ -173,9 +230,10 @@ def optimize_genetic_squad(
     tournament_size: int = 3,
     initial_mutation_rate: float = 0.30,
     seed: int | None = 42,
+    use_gpu: bool = True,
 ) -> SquadRecommendation:
     """
-    Select an optimal squad using a State-of-the-Art Hybrid Memetic Genetic Algorithm.
+    Select an optimal squad using a State-of-the-Art Hybrid Memetic Genetic Algorithm (GPU Vectorized).
     """
     df = prepare_players(players)
     df = enrich_df_with_xp(df)
@@ -183,15 +241,12 @@ def optimize_genetic_squad(
     rng = np.random.default_rng(seed=seed)
     indices = list(df.index)
 
-    def evaluate_fitness(chrom: list[int]) -> float:
-        cost = float(df.loc[chrom, "cost"].sum())
-        if cost > budget or len(set(chrom)) != SQUAD_SIZE:
-            return 0.0
-        return float(df.loc[chrom, "target_xp"].sum())
+    xp_vector = df["target_xp"].fillna(df["calculated_xp"]).to_numpy(dtype=float)
+    cost_vector = df["cost"].to_numpy(dtype=float)
 
-    # 1. Initialize random population with repair operator
-    population: list[list[int]] = []
-    for _ in range(population_size):
+    # 1. Seed initial population (25% domain smart seeds + 75% random)
+    population = _seed_smart_population(df, population_size, budget, club_limit, rng)
+    while len(population) < population_size:
         raw_indices = rng.choice(indices, size=SQUAD_SIZE, replace=False).tolist()
         repaired = _repair_squad_chromosome(raw_indices, df, budget, club_limit, rng)
         population.append(repaired)
@@ -201,7 +256,16 @@ def optimize_genetic_squad(
 
     # 2. Evolutionary Loop
     for gen in range(generations):
-        fitnesses = [evaluate_fitness(chrom) for chrom in population]
+        pop_matrix = np.array(population)
+
+        # PyTorch CUDA GPU Vectorized Batch Population Fitness Evaluation
+        fitnesses = evaluate_population_gpu(
+            population_matrix=pop_matrix,
+            xp_vector=xp_vector,
+            cost_vector=cost_vector,
+            budget=budget,
+            use_gpu=use_gpu,
+        ).tolist()
 
         # Sort population by fitness descending
         sorted_indices = np.argsort(fitnesses)[::-1]
@@ -219,9 +283,12 @@ def optimize_genetic_squad(
         for i in range(min(elitism_count, population_size)):
             population[i] = _memetic_local_search(population[i], df, budget, club_limit, rng)
 
-        # Adaptive mutation schedule (simulated annealing)
-        adaptive_mutation_rate = initial_mutation_rate * (1.0 - (gen / float(generations)) ** 0.5)
-        adaptive_mutation_rate = max(0.05, adaptive_mutation_rate)
+        # Adaptive mutation schedule (simulated annealing) & Jaccard diversity adjustment
+        diversity = _compute_jaccard_diversity(population[:20])
+        diversity_boost = 1.5 if diversity < 0.35 else 1.0
+
+        adaptive_mutation_rate = initial_mutation_rate * (1.0 - (gen / float(generations)) ** 0.5) * diversity_boost
+        adaptive_mutation_rate = float(np.clip(adaptive_mutation_rate, 0.05, 0.50))
 
         # Stagnation recovery: diversity injection
         if stagnation_counter >= 10:
@@ -242,13 +309,13 @@ def optimize_genetic_squad(
             p1 = _tournament_selection(population, fitnesses, tournament_size, rng)
             p2 = _tournament_selection(population, fitnesses, tournament_size, rng)
 
-            # Crossover
+            # Position-Guided Crossover
             if rng.random() < 0.85:
                 c1_raw, c2_raw = _position_guided_crossover(p1, p2, df, rng)
             else:
                 c1_raw, c2_raw = list(p1), list(p2)
 
-            # Mutation
+            # Adaptive Mutation
             if rng.random() < adaptive_mutation_rate and len(c1_raw) > 0:
                 drop_i = int(rng.choice(c1_raw))
                 c1_raw.remove(drop_i)
@@ -268,8 +335,15 @@ def optimize_genetic_squad(
 
         population = new_pop[:population_size]
 
-    # Evaluate final population & return global best
-    final_fitnesses = [evaluate_fitness(chrom) for chrom in population]
+    # Evaluate final population on GPU & return global best
+    pop_matrix = np.array(population)
+    final_fitnesses = evaluate_population_gpu(
+        population_matrix=pop_matrix,
+        xp_vector=xp_vector,
+        cost_vector=cost_vector,
+        budget=budget,
+        use_gpu=use_gpu,
+    )
     best_chrom = population[int(np.argmax(final_fitnesses))]
 
     selected_df = df.loc[best_chrom].copy()
