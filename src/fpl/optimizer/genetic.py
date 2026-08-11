@@ -172,6 +172,7 @@ def optimize_genetic_squad(
     elitism_count: int = 2,
     tournament_size: int = 3,
     initial_mutation_rate: float = 0.30,
+    seed: int | None = 42,
 ) -> SquadRecommendation:
     """
     Select an optimal squad using a State-of-the-Art Hybrid Memetic Genetic Algorithm.
@@ -179,7 +180,7 @@ def optimize_genetic_squad(
     df = prepare_players(players)
     df = enrich_df_with_xp(df)
 
-    rng = np.random.default_rng(seed=42)
+    rng = np.random.default_rng(seed=seed)
     indices = list(df.index)
 
     def evaluate_fitness(chrom: list[int]) -> float:
