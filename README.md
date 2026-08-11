@@ -101,14 +101,17 @@ Fetch live player prices & projections from the official FPL API and generate re
 # Single-Period PuLP solver (default)
 uv run python scripts/recommend_squad.py --solver single_period
 
+# Lock Erling Haaland into the squad (--lock Haaland)
+uv run python scripts/recommend_squad.py --lock Haaland
+
 # Multi-Period Horizon solver (5-week block)
 uv run python scripts/recommend_squad.py --solver multi_period --horizon 5
 
-# Stochastic Risk-Adjusted Scenario solver (risk_aversion=0.25)
+# Stochastic Risk-Adjusted Scenario solver (CUDA GPU accelerated)
 uv run python scripts/recommend_squad.py --solver stochastic --risk-aversion 0.25
 
-# State-of-the-Art Memetic Genetic Algorithm (custom seed, generations & population)
-uv run python scripts/recommend_squad.py --solver genetic --seed 42 --generations 60 --population 80
+# PyTorch CUDA GPU Vectorized Genetic Algorithm (custom seed, generations & population)
+uv run python scripts/recommend_squad.py --solver genetic --seed 42 --generations 80 --population 100
 ```
 
 #### CLI Command-Line Arguments
@@ -116,6 +119,8 @@ uv run python scripts/recommend_squad.py --solver genetic --seed 42 --generation
 | Argument | Type | Default | Choices | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `--solver` | `str` | `single_period` | `single_period`, `multi_period`, `stochastic`, `genetic` | Selects solver strategy model |
+| `--lock` | `str list` | `None` | Any player name | Locks specific player(s) into squad (e.g. `--lock Haaland`) |
+| `--exclude` | `str list` | `None` | Any player name | Excludes specific player(s) from squad (e.g. `--exclude Palmer`) |
 | `--seed` | `int` | `42` | Any integer | Random seed (`42` for fixed/reproducible, or custom int) |
 | `--generations` | `int` | `50` | $\ge 1$ | Number of evolutionary generations (`genetic` solver) |
 | `--population` | `int` | `60` | $\ge 10$ | Chromosome population size (`genetic` solver) |
