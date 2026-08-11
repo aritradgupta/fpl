@@ -4,6 +4,8 @@ PuLP Integer Linear Programming (ILP) Solver for FPL Squad Selection & Transfer 
 Formulates squad selection and transfer decisions as constrained integer linear programs.
 """
 
+from itertools import combinations, product
+
 import pandas as pd
 import pulp  # type: ignore[import-untyped]
 
@@ -31,6 +33,36 @@ from fpl.rules.constraints import (
 )
 
 
+def _prepare_players(players: pd.DataFrame | list[PlayerStats]) -> pd.DataFrame:
+    """Normalize solver input and fail with useful errors before invoking CBC."""
+    if isinstance(players, list):
+        if not players:
+            raise ValueError("At least one player is required.")
+        df = pd.DataFrame([p.model_dump() for p in players])
+        df["position"] = [p.position.value for p in players]
+    else:
+        df = players.copy().reset_index(drop=True)
+
+    required = {"id", "position", "team", "cost"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"Player data is missing required columns: {', '.join(sorted(missing))}.")
+    if df["id"].duplicated().any():
+        raise ValueError("Player data contains duplicate IDs.")
+    df["cost"] = pd.to_numeric(df["cost"], errors="coerce")
+    if df["cost"].isna().any() or (df["cost"] < 0).any():
+        raise ValueError("Player costs must be finite, non-negative numbers.")
+    df["position"] = df["position"].astype(str).str.upper()
+    df["team"] = df["team"].fillna("Unknown").astype(str)
+    return df
+
+
+def _require_optimal(prob: pulp.LpProblem, label: str) -> None:
+    status = pulp.LpStatus[prob.status]
+    if status != "Optimal":
+        raise ValueError(f"{label} is {status.lower()}. Check the budget, position, and club limits.")
+
+
 def optimize_squad(
     players: pd.DataFrame | list[PlayerStats],
     budget: float = TOTAL_BUDGET,
@@ -40,13 +72,9 @@ def optimize_squad(
     """
     Select an optimal 15-player FPL squad maximizing expected points subject to budget and position rules.
     """
-    if isinstance(players, list):
-        df_rows = [p.model_dump() for p in players]
-        df = pd.DataFrame(df_rows)
-        df["position"] = [p.position.value for p in players]
-    else:
-        df = players.copy().reset_index(drop=True)
-
+    if budget < 0 or club_limit < 1:
+        raise ValueError("Budget must be non-negative and club_limit must be at least 1.")
+    df = _prepare_players(players)
     df = enrich_df_with_xp(df)
 
     prob = pulp.LpProblem("FPL_Squad_Optimizer", pulp.LpMaximize)
@@ -78,8 +106,11 @@ def optimize_squad(
 
     solver = pulp.PULP_CBC_CMD(msg=False)
     prob.solve(solver)
+    _require_optimal(prob, "Squad optimization")
 
     selected_indices = [i for i in df.index if player_vars[i].value() == 1]
+    if len(selected_indices) != SQUAD_SIZE:
+        raise ValueError("Squad optimization returned an incomplete squad.")
     selected_squad_df = df.loc[selected_indices].copy()
 
     return optimize_starting_xi_and_bench(selected_squad_df, chip=chip)
@@ -92,7 +123,9 @@ def optimize_starting_xi_and_bench(
     """
     Select optimal 11 starters, bench order, Captain, and Vice-Captain from a 15-man squad.
     """
-    df = squad_df.copy().reset_index(drop=True)
+    df = _prepare_players(squad_df)
+    if len(df) != SQUAD_SIZE:
+        raise ValueError(f"Starting XI optimization requires exactly {SQUAD_SIZE} squad players.")
     df = enrich_df_with_xp(df)
 
     prob = pulp.LpProblem("FPL_Starting_XI_Optimizer", pulp.LpMaximize)
@@ -130,6 +163,7 @@ def optimize_starting_xi_and_bench(
 
     solver = pulp.PULP_CBC_CMD(msg=False)
     prob.solve(solver)
+    _require_optimal(prob, "Starting XI optimization")
 
     df["is_starter"] = [bool(starter_vars[i].value() == 1) for i in df.index]
     df["is_captain"] = [bool(captain_vars[i].value() == 1) for i in df.index]
@@ -197,6 +231,13 @@ def optimize_transfers(
     """
     Recommend optimal transfer strategy evaluating points gain against hit penalties (-4 pts).
     """
+    if len(current_squad) != SQUAD_SIZE:
+        raise ValueError(f"Current squad must contain exactly {SQUAD_SIZE} players.")
+    if len({p.id for p in current_squad}) != SQUAD_SIZE:
+        raise ValueError("Current squad contains duplicate player IDs.")
+    if free_transfers < 0 or max_transfers < 0 or bank_budget < 0:
+        raise ValueError("Transfer limits and bank budget must be non-negative.")
+
     current_ids = {p.id for p in current_squad}
     current_cost = sum(p.cost for p in current_squad)
     max_allowed_budget = current_cost + bank_budget
@@ -207,7 +248,7 @@ def optimize_transfers(
     best_squad_rec = baseline_squad_rec
     best_hits_cost = 0
 
-    if max_transfers <= 0 or chip in [ChipType.WILDCARD, ChipType.FREE_HIT]:
+    if chip in [ChipType.WILDCARD, ChipType.FREE_HIT]:
         new_squad_rec = optimize_squad(available_players, budget=max_allowed_budget, chip=chip)
         new_squad_projections = [p.projection for p in new_squad_rec.starting_xi + new_squad_rec.bench]
         new_ids = {p.player_id for p in new_squad_projections}
@@ -241,37 +282,64 @@ def optimize_transfers(
             recommended_squad=new_squad_rec,
         )
 
-    out_candidates: list[PlayerStats] = list(current_squad)
-    in_candidates: list[PlayerStats] = [p for p in available_players if p.id not in current_ids]
+    if max_transfers == 0:
+        return TransferRecommendation(
+            transfers=[],
+            transfers_count=0,
+            free_transfers_used=0,
+            hits_cost=0,
+            gross_xp_gain=0.0,
+            net_xp_gain=0.0,
+            recommended_squad=baseline_squad_rec,
+        )
 
-    for n_transfers in range(1, max_transfers + 1):
-        extra_transfers = max(0, n_transfers - free_transfers)
-        hit_penalty = extra_transfers * 4
+    out_candidates = list(current_squad)
+    in_candidates = [p for p in available_players if p.id not in current_ids]
+    # Limit the combinatorial search to the eight best projected replacements per
+    # position. This evaluates genuine 1/2/3-transfer plans while remaining
+    # practical against the full ~700-player API universe.
+    ranked_in: dict[object, list[PlayerStats]] = {}
+    for pos in {p.position for p in out_candidates}:
+        candidates = [p for p in in_candidates if p.position == pos]
+        ranked_in[pos] = sorted(candidates, key=lambda p: project_player_xp(p).total_xp, reverse=True)[:8]
 
-        for p_out in out_candidates:
-            p_out_proj = project_player_xp(p_out)
-            same_pos_in = [
-                p for p in in_candidates if p.position == p_out.position and p.cost <= (p_out.cost + bank_budget)
-            ]
-
-            for p_in in same_pos_in:
-                p_in_proj = project_player_xp(p_in)
-                xp_diff = p_in_proj.total_xp - p_out_proj.total_xp
-                net_gain = xp_diff - hit_penalty
-
-                if net_gain > best_net_gain:
-                    best_net_gain = net_gain
+    for n_transfers in range(1, min(max_transfers, len(out_candidates)) + 1):
+        hit_penalty = max(0, n_transfers - free_transfers) * 4
+        for outs in combinations(out_candidates, n_transfers):
+            choices = [ranked_in.get(p.position, []) for p in outs]
+            for ins in product(*choices):
+                if len({p.id for p in ins}) != n_transfers:
+                    continue
+                if sum(p.cost for p in ins) - sum(p.cost for p in outs) > bank_budget + 1e-9:
+                    continue
+                new_squad_list = [p for p in current_squad if p.id not in {o.id for o in outs}] + list(ins)
+                try:
+                    candidate_rec = optimize_squad(new_squad_list, budget=max_allowed_budget, chip=chip)
+                except ValueError:
+                    continue
+                gross_gain = candidate_rec.total_expected_points - baseline_squad_rec.total_expected_points
+                net_gain = gross_gain - hit_penalty
+                individual_gain = sum(
+                    project_player_xp(inn).total_xp - project_player_xp(out).total_xp
+                    for out, inn in zip(outs, ins, strict=False)
+                )
+                # A swap that only improves a benched player may tie on XI
+                # points. Keep the first positive, no-hit tie as a useful
+                # squad-improvement recommendation instead of silently dropping it.
+                is_positive_tie = not best_transfers and n_transfers == 1 and individual_gain > 0
+                if net_gain > best_net_gain + 1e-9 or is_positive_tie:
+                    best_net_gain = max(0.0, net_gain)
                     best_hits_cost = hit_penalty
-
-                    single_tr = SingleTransfer(
-                        player_out=p_out_proj,
-                        player_in=p_in_proj,
-                        cost_difference=round(p_in.cost - p_out.cost, 1),
-                        net_xp_gain=round(xp_diff, 2),
-                    )
-                    best_transfers = [single_tr]
-                    new_squad_list = [p for p in current_squad if p.id != p_out.id] + [p_in]
-                    best_squad_rec = optimize_squad(new_squad_list, budget=max_allowed_budget, chip=chip)
+                    best_squad_rec = candidate_rec
+                    best_transfers = [
+                        SingleTransfer(
+                            player_out=project_player_xp(out),
+                            player_in=project_player_xp(inn),
+                            cost_difference=round(inn.cost - out.cost, 1),
+                            net_xp_gain=round(project_player_xp(inn).total_xp - project_player_xp(out).total_xp, 2),
+                        )
+                        for out, inn in zip(outs, ins, strict=False)
+                    ]
 
     gross_gain = best_squad_rec.total_expected_points - baseline_squad_rec.total_expected_points
 

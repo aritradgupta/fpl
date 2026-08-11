@@ -7,6 +7,7 @@ Manages local caching of live FPL API data:
 - Sync timestamp logging
 """
 
+import json
 from pathlib import Path
 
 import aiosqlite
@@ -100,8 +101,8 @@ async def sync_bootstrap_to_db(bootstrap_data: dict, db_path: Path = DB_PATH) ->
                 INSERT OR REPLACE INTO players (
                     id, web_name, first_name, second_name, position, team, team_code,
                     cost, ep_next, form, points_per_game, total_points, minutes,
-                    goals_scored, assists, clean_sheets, selected_by_percent
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    goals_scored, assists, clean_sheets, selected_by_percent, raw_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     p["id"],
@@ -121,6 +122,7 @@ async def sync_bootstrap_to_db(bootstrap_data: dict, db_path: Path = DB_PATH) ->
                     p.get("assists", 0),
                     p.get("clean_sheets", 0),
                     float(p.get("selected_by_percent") or 0.0),
+                    json.dumps(p, separators=(",", ":")),
                 ),
             )
 

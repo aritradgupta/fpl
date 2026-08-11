@@ -164,3 +164,20 @@ def test_optimize_transfers(mock_player_stats):
     assert transfer_rec.free_transfers_used == 1
     assert transfer_rec.hits_cost == 0
     assert transfer_rec.net_xp_gain >= 0.0
+
+
+def test_infeasible_squad_fails_with_actionable_error(mock_player_stats):
+    with pytest.raises(ValueError, match="budget|position|club"):
+        optimize_squad(mock_player_stats, budget=1.0)
+
+
+def test_zero_transfer_limit_keeps_baseline(mock_player_stats):
+    initial_rec = optimize_squad(mock_player_stats, budget=100.0)
+    current_squad = [
+        p
+        for p in mock_player_stats
+        if p.id in {sp.projection.player_id for sp in initial_rec.starting_xi + initial_rec.bench}
+    ]
+    result = optimize_transfers(current_squad, mock_player_stats, max_transfers=0)
+    assert result.transfers_count == 0
+    assert result.net_xp_gain == 0.0

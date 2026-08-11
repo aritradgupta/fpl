@@ -158,3 +158,29 @@ uv run ruff format .
 ## License
 
 MIT License. Developed for EPL Fantasy Premier League 2026-27 team management.
+
+## FPL analysis and squad optimizer
+
+An async Python application for combining the official Fantasy Premier League API with local historical data analysis.
+
+## Quick start
+
+   uv sync
+   uv run python scripts/recommend_squad.py
+   uv run pytest
+
+The API starts with uv run fpl and exposes interactive documentation at /docs. Live bootstrap data is cached in data/fpl_cache.db; the app can continue to read the cache when the official API is unavailable.
+
+## Project layout
+
+- src/fpl/client: resilient async client for official endpoints.
+- src/fpl/data: SQLite cache and bootstrap synchronization.
+- src/fpl/optimizer: expected-points model and PuLP squad/transfer optimization.
+- src/fpl/rules: centralized squad, formation, transfer, and scoring rules.
+- analysis/eda.py: exploratory analysis of vaastav historical data.
+
+The optimizer uses current API prices in £m, requires the official 2 GKP / 5 DEF / 5 MID / 3 FWD squad shape, enforces a three-player-per-club limit by default, and checks solver status before returning a recommendation.
+
+## Data caveats
+
+Historical vaastav files and the official API do not always use identical column names or definitions. Treat projections as a baseline for analysis rather than a guarantee. Fixture context should be supplied explicitly when using the projection functions for a specific gameweek.

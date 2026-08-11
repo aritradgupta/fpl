@@ -10,7 +10,6 @@ Implements an empirical Expected Points model derived from our 5-season EDA find
 6. Fixture Difficulty Rating (FDR) & Home/Away composite multipliers
 """
 
-import numpy as np
 import pandas as pd
 
 from fpl.models.player import (
@@ -178,7 +177,10 @@ def project_player_xp(
 def player_stats_from_series(row: pd.Series) -> PlayerStats:
     """Construct a strongly typed PlayerStats object from a DataFrame row."""
     pos_raw = str(row.get("position", "MID")).upper()
-    pos = Position(pos_raw) if pos_raw in Position.__members__ else Position.MID
+    try:
+        pos = Position(pos_raw)
+    except ValueError:
+        pos = Position.MID
 
     cost_val = float(row.get("cost", row.get("now_cost", 50)) or 5.0)
     if cost_val > 20.0:
@@ -235,8 +237,9 @@ def enrich_df_with_xp(players_df: pd.DataFrame) -> pd.DataFrame:
     df["expected_minutes"] = [p.expected_minutes for p in projections]
 
     if "ep_next" in df.columns:
-        ep_next_num = pd.to_numeric(df["ep_next"], errors="coerce").fillna(0.0)
-        df["target_xp"] = np.maximum(df["calculated_xp"], ep_next_num)
+        # ep_next is blended into project_player_xp already. Keeping one
+        # objective value avoids optimizing a different value than we return.
+        df["target_xp"] = df["calculated_xp"]
     else:
         df["target_xp"] = df["calculated_xp"]
 
