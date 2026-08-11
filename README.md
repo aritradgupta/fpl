@@ -95,11 +95,32 @@ uv sync
 
 ### 1. Run Live Squad Recommendation CLI
 
-Fetch live player prices & projections from the official FPL API and generate the optimal 15-man squad:
+Fetch live player prices & projections from the official FPL API and generate recommendations:
 
 ```bash
-uv run python scripts/recommend_squad.py
+# Single-Period PuLP solver (default)
+uv run python scripts/recommend_squad.py --solver single_period
+
+# Multi-Period Horizon solver (5-week block)
+uv run python scripts/recommend_squad.py --solver multi_period --horizon 5
+
+# Stochastic Risk-Adjusted Scenario solver (risk_aversion=0.25)
+uv run python scripts/recommend_squad.py --solver stochastic --risk-aversion 0.25
+
+# State-of-the-Art Memetic Genetic Algorithm (custom seed, generations & population)
+uv run python scripts/recommend_squad.py --solver genetic --seed 42 --generations 60 --population 80
 ```
+
+#### CLI Command-Line Arguments
+
+| Argument | Type | Default | Choices | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `--solver` | `str` | `single_period` | `single_period`, `multi_period`, `stochastic`, `genetic` | Selects solver strategy model |
+| `--seed` | `int` | `42` | Any integer | Random seed (`42` for fixed/reproducible, or custom int) |
+| `--generations` | `int` | `50` | $\ge 1$ | Number of evolutionary generations (`genetic` solver) |
+| `--population` | `int` | `60` | $\ge 10$ | Chromosome population size (`genetic` solver) |
+| `--risk-aversion` | `float` | `0.15` | $0.0 - 2.0$ | Risk aversion parameter $\lambda$ (`stochastic` solver) |
+| `--horizon` | `int` | `3` | $1 - 10$ | Number of upcoming gameweeks in multi-period block (`multi_period` solver) |
 
 ### 2. Start FastAPI Web Server
 
