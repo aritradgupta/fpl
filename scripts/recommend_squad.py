@@ -7,7 +7,7 @@ Syncs live data from official FPL API and runs your choice of solver model:
 - stochastic: Monte Carlo Scenario Risk Solver
 - genetic: Metaheuristic Evolutionary Algorithm
 
-Run: uv run python scripts/recommend_squad.py --solver single_period
+Run: uv run python scripts/recommend_squad.py --solver genetic --seed 42 --generations 50
 """
 
 import argparse
@@ -30,10 +30,18 @@ from fpl.optimizer import optimize_squad
 console = Console(width=120)
 
 
-async def generate_recommendation(solver_type: str = "single_period"):
+async def generate_recommendation(
+    solver_type: str = "single_period",
+    seed: int | None = 42,
+    generations: int = 50,
+    population_size: int = 60,
+    risk_aversion: float = 0.15,
+    horizon_weeks: int = 3,
+):
     console.print(
         Panel(
             f"[bold green]FPL 2026-27 Team Creator — Solver Model: [{solver_type.upper()}][/bold green]\n"
+            f"Config: seed={seed}, gen={generations}, pop={population_size}, risk={risk_aversion}, horizon={horizon_weeks}w\n"
             "Fetching live player prices & projections from Fantasy Premier League API...",
             border_style="green",
         )
@@ -53,7 +61,16 @@ async def generate_recommendation(solver_type: str = "single_period"):
     players_df = await load_players_df_from_db()
 
     # 3. Run selected solver strategy
-    squad_rec = optimize_squad(players_df, budget=100.0, solver_type=solver_type)
+    squad_rec = optimize_squad(
+        players_df,
+        budget=100.0,
+        solver_type=solver_type,
+        seed=seed,
+        generations=generations,
+        population_size=population_size,
+        risk_aversion=risk_aversion,
+        horizon_weeks=horizon_weeks,
+    )
 
     # 4. Print 15-Man Squad Summary Table
     table = Table(
@@ -116,8 +133,25 @@ def main():
         choices=[s.value for s in SolverType],
         help="Solver model strategy: single_period, multi_period, stochastic, genetic",
     )
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for genetic/stochastic solvers")
+    parser.add_argument("--generations", type=int, default=50, help="Number of generations for genetic algorithm")
+    parser.add_argument("--population", type=int, default=60, help="Population size for genetic algorithm")
+    parser.add_argument(
+        "--risk-aversion", type=float, default=0.15, help="Risk aversion parameter for stochastic solver"
+    )
+    parser.add_argument("--horizon", type=int, default=3, help="Horizon weeks count for multi-period solver")
+
     args = parser.parse_args()
-    asyncio.run(generate_recommendation(solver_type=args.solver))
+    asyncio.run(
+        generate_recommendation(
+            solver_type=args.solver,
+            seed=args.seed,
+            generations=args.generations,
+            population_size=args.population,
+            risk_aversion=args.risk_aversion,
+            horizon_weeks=args.horizon,
+        )
+    )
 
 
 if __name__ == "__main__":

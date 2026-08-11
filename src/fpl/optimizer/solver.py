@@ -43,7 +43,9 @@ def optimize_squad(
     solver_type: SolverType | str = SolverType.SINGLE_PERIOD,
     horizon_weeks: int = 3,
     risk_aversion: float = 0.15,
-    generations: int = 40,
+    generations: int = 50,
+    population_size: int = 60,
+    seed: int | None = 42,
 ) -> SquadRecommendation:
     """
     Select an optimal 15-player FPL squad using the specified solver strategy.
@@ -63,7 +65,15 @@ def optimize_squad(
             players, budget=budget, club_limit=club_limit, chip=chip, risk_aversion=risk_aversion
         )
     if solver_type == SolverType.GENETIC:
-        return optimize_genetic_squad(players, budget=budget, club_limit=club_limit, chip=chip, generations=generations)
+        return optimize_genetic_squad(
+            players,
+            budget=budget,
+            club_limit=club_limit,
+            chip=chip,
+            generations=generations,
+            population_size=population_size,
+            seed=seed,
+        )
 
     return optimize_single_period_squad(players, budget=budget, club_limit=club_limit, chip=chip)
 
