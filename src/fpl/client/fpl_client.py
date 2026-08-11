@@ -8,9 +8,9 @@ Handles interaction with live Fantasy Premier League API endpoints:
 - entry/{manager_id}/ (user squad import)
 """
 
-from typing import Any, Dict, List, Optional
-import httpx
+from typing import Any
 
+import httpx
 
 BASE_URL = "https://fantasy.premierleague.com/api"
 
@@ -29,7 +29,7 @@ class FPLClient:
             )
         }
 
-    async def get_bootstrap_static(self) -> Dict[str, Any]:
+    async def get_bootstrap_static(self) -> dict[str, Any]:
         """Fetch general FPL data including players (elements), teams, and gameweeks."""
         url = f"{self.base_url}/bootstrap-static/"
         async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers) as client:
@@ -37,7 +37,7 @@ class FPLClient:
             resp.raise_for_status()
             return resp.json()
 
-    async def get_fixtures(self, event: Optional[int] = None) -> List[Dict[str, Any]]:
+    async def get_fixtures(self, event: int | None = None) -> list[dict[str, Any]]:
         """Fetch fixtures. Optionally filter by gameweek event ID."""
         url = f"{self.base_url}/fixtures/"
         if event is not None:
@@ -48,7 +48,7 @@ class FPLClient:
             resp.raise_for_status()
             return resp.json()
 
-    async def get_player_summary(self, player_id: int) -> Dict[str, Any]:
+    async def get_player_summary(self, player_id: int) -> dict[str, Any]:
         """Fetch detailed stats and history for a specific player ID."""
         url = f"{self.base_url}/element-summary/{player_id}/"
         async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers) as client:
@@ -56,7 +56,7 @@ class FPLClient:
             resp.raise_for_status()
             return resp.json()
 
-    async def get_user_entry(self, user_id: int) -> Dict[str, Any]:
+    async def get_user_entry(self, user_id: int) -> dict[str, Any]:
         """Fetch manager entry info by user ID."""
         url = f"{self.base_url}/entry/{user_id}/"
         async with httpx.AsyncClient(timeout=self.timeout, headers=self._headers) as client:

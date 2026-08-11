@@ -8,10 +8,9 @@ Manages local caching of live FPL API data:
 """
 
 from pathlib import Path
-from typing import Dict
+
 import aiosqlite
 import pandas as pd
-
 
 DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "fpl_cache.db"
 
@@ -62,7 +61,7 @@ async def init_db(db_path: Path = DB_PATH) -> None:
         await db.commit()
 
 
-async def sync_bootstrap_to_db(bootstrap_data: Dict, db_path: Path = DB_PATH) -> int:
+async def sync_bootstrap_to_db(bootstrap_data: dict, db_path: Path = DB_PATH) -> int:
     """Sync live bootstrap-static JSON data to SQLite database."""
     await init_db(db_path)
 
@@ -125,9 +124,7 @@ async def sync_bootstrap_to_db(bootstrap_data: Dict, db_path: Path = DB_PATH) ->
                 ),
             )
 
-        await db.execute(
-            "INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_sync', datetime('now'))"
-        )
+        await db.execute("INSERT OR REPLACE INTO sync_meta (key, value) VALUES ('last_sync', datetime('now'))")
         await db.commit()
 
     return len(elements)
@@ -136,8 +133,7 @@ async def sync_bootstrap_to_db(bootstrap_data: Dict, db_path: Path = DB_PATH) ->
 async def load_players_df_from_db(db_path: Path = DB_PATH) -> pd.DataFrame:
     """Load player dataset from SQLite into pandas DataFrame."""
     await init_db(db_path)
-    async with aiosqlite.connect(db_path) as db:
-        async with db.execute("SELECT * FROM players") as cursor:
-            rows = await cursor.fetchall()
-            cols = [col[0] for col in cursor.description]
-            return pd.DataFrame(rows, columns=cols)
+    async with aiosqlite.connect(db_path) as db, db.execute("SELECT * FROM players") as cursor:
+        rows = await cursor.fetchall()
+        cols = [col[0] for col in cursor.description]
+        return pd.DataFrame(rows, columns=cols)

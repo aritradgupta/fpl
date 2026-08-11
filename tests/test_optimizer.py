@@ -4,22 +4,17 @@ Unit tests for Upgraded Solver & Transfer Optimizer.
 Run with: uv run pytest tests/
 """
 
-import pandas as pd
 import pytest
 
 from fpl.models.player import PlayerStats, Position
 from fpl.models.squad import ChipType, SquadRole
 from fpl.optimizer.solver import (
     optimize_squad,
-    optimize_starting_xi_and_bench,
     optimize_transfers,
 )
 from fpl.rules.constraints import (
-    POSITION_LIMITS,
-    SQUAD_SIZE,
     TOTAL_BUDGET,
     validate_squad_composition,
-    validate_starting_xi,
 )
 
 
@@ -113,7 +108,10 @@ def test_optimize_squad_typed(mock_player_stats):
 
     # Validate rules constraints
     all_players = rec.starting_xi + rec.bench
-    squad_dicts = [{"position": p.projection.position.value, "team": p.projection.team, "cost": p.projection.cost} for p in all_players]
+    squad_dicts = [
+        {"position": p.projection.position.value, "team": p.projection.team, "cost": p.projection.cost}
+        for p in all_players
+    ]
     is_valid, errors = validate_squad_composition(squad_dicts)
     assert is_valid, f"Squad composition error: {errors}"
 
@@ -131,13 +129,29 @@ def test_optimize_squad_chip_triple_captain(mock_player_stats):
 def test_optimize_transfers(mock_player_stats):
     # Select initial 15 squad players
     initial_rec = optimize_squad(mock_player_stats, budget=100.0)
-    current_squad = [p for p in mock_player_stats if p.id in [sp.projection.player_id for sp in initial_rec.starting_xi + initial_rec.bench]]
+    current_squad = [
+        p
+        for p in mock_player_stats
+        if p.id in [sp.projection.player_id for sp in initial_rec.starting_xi + initial_rec.bench]
+    ]
 
     # Modify squad player to simulate a form drop
     poor_player = current_squad[0]
-    modified_squad = [p if p.id != poor_player.id else PlayerStats(
-        id=p.id, web_name=p.web_name, position=p.position, team=p.team, cost=p.cost, ep_next=0.1, form=0.1, points_per_game=0.5
-    ) for p in current_squad]
+    modified_squad = [
+        p
+        if p.id != poor_player.id
+        else PlayerStats(
+            id=p.id,
+            web_name=p.web_name,
+            position=p.position,
+            team=p.team,
+            cost=p.cost,
+            ep_next=0.1,
+            form=0.1,
+            points_per_game=0.5,
+        )
+        for p in current_squad
+    ]
 
     transfer_rec = optimize_transfers(
         current_squad=modified_squad,

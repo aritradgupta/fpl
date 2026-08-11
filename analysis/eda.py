@@ -11,8 +11,8 @@ Run: uv run python analysis/eda.py
 # pylint: disable=too-many-lines
 
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -145,16 +145,10 @@ def load_all_seasons() -> pd.DataFrame:
         df = load_season_gw(season)
         if df is not None:
             frames.append(df)
-            console.print(
-                f"  [green]✓[/green] {season}: "
-                f"{len(df):,} rows, {len(df.columns)} columns"
-            )
+            console.print(f"  [green]✓[/green] {season}: {len(df):,} rows, {len(df.columns)} columns")
 
     combined = pd.concat(frames, ignore_index=True, sort=False)
-    console.print(
-        f"\n  [bold green]Combined:[/bold green] {len(combined):,} total rows "
-        f"across {len(frames)} seasons\n"
-    )
+    console.print(f"\n  [bold green]Combined:[/bold green] {len(combined):,} total rows across {len(frames)} seasons\n")
     return combined
 
 
@@ -177,9 +171,7 @@ def analyze_schemas():
         return
 
     common = set.intersection(*season_cols.values())
-    console.print(
-        f"\n[bold]Columns in ALL {len(season_cols)} seasons[/bold] ({len(common)}):"
-    )
+    console.print(f"\n[bold]Columns in ALL {len(season_cols)} seasons[/bold] ({len(common)}):")
     console.print(f"  {sorted(common)}\n")
 
     # Show what was added/removed per season
@@ -275,14 +267,8 @@ def profile_data(df: pd.DataFrame):
         f"  Mean: {pts.mean():.2f} | Median: {pts.median():.0f} | "
         f"Std: {pts.std():.2f} | Min: {pts.min():.0f} | Max: {pts.max():.0f}"
     )
-    console.print(
-        f"  Zero-point GWs: {(pts == 0).sum():,} "
-        f"({(pts == 0).sum() / len(pts) * 100:.1f}%)"
-    )
-    console.print(
-        f"  Double-digit hauls (≥10): {(pts >= 10).sum():,} "
-        f"({(pts >= 10).sum() / len(pts) * 100:.1f}%)"
-    )
+    console.print(f"  Zero-point GWs: {(pts == 0).sum():,} ({(pts == 0).sum() / len(pts) * 100:.1f}%)")
+    console.print(f"  Double-digit hauls (≥10): {(pts >= 10).sum():,} ({(pts >= 10).sum() / len(pts) * 100:.1f}%)")
     console.print()
 
 
@@ -358,9 +344,9 @@ def analyze_positional_value(df: pd.DataFrame):
         .reset_index()
     )
     season_agg["pts_per_m"] = season_agg["total_pts"] / season_agg["avg_price"]
-    season_agg["pts_per_90"] = (
-        season_agg["total_pts"] / (season_agg["total_minutes"] / 90)
-    ).replace([np.inf, -np.inf], np.nan)
+    season_agg["pts_per_90"] = (season_agg["total_pts"] / (season_agg["total_minutes"] / 90)).replace(
+        [np.inf, -np.inf], np.nan
+    )
 
     # Position-level summary
     table = Table(
@@ -440,15 +426,13 @@ def analyze_form(df: pd.DataFrame):
     for window in windows:
         # Rolling mean of points for each player within a season
         w = window  # capture for lambda
-        played[f"form_{window}"] = played.groupby(["name", "season"])[
-            "total_points"
-        ].transform(lambda x, _w=w: x.rolling(_w, min_periods=_w).mean().shift(1))
+        played[f"form_{window}"] = played.groupby(["name", "season"])["total_points"].transform(
+            lambda x, _w=w: x.rolling(_w, min_periods=_w).mean().shift(1)
+        )
         # Correlation of form_N with actual next GW points
         valid = played[["total_points", f"form_{window}"]].dropna()
         if len(valid) > 100:
-            correlations[f"Last {window} GWs"] = valid["total_points"].corr(
-                valid[f"form_{window}"]
-            )
+            correlations[f"Last {window} GWs"] = valid["total_points"].corr(valid[f"form_{window}"])
 
     # Also compare season average up to that point
     played["season_avg"] = played.groupby(["name", "season"])["total_points"].transform(
@@ -456,9 +440,7 @@ def analyze_form(df: pd.DataFrame):
     )
     valid = played[["total_points", "season_avg"]].dropna()
     if len(valid) > 100:
-        correlations["Season Avg (expanding)"] = valid["total_points"].corr(
-            valid["season_avg"]
-        )
+        correlations["Season Avg (expanding)"] = valid["total_points"].corr(valid["season_avg"])
 
     # Also check xP from FPL
     if "xP" in played.columns:
@@ -475,9 +457,7 @@ def analyze_form(df: pd.DataFrame):
     table.add_column("Predictor", style="cyan")
     table.add_column("Correlation", justify="right")
 
-    for name, corr in sorted(
-        correlations.items(), key=lambda x: abs(x[1]), reverse=True
-    ):
+    for name, corr in sorted(correlations.items(), key=lambda x: abs(x[1]), reverse=True):
         color = "green" if abs(corr) > 0.15 else "yellow"
         table.add_row(name, f"[{color}]{corr:+.4f}[/{color}]")
 
@@ -498,9 +478,7 @@ def analyze_home_away_fdr(df: pd.DataFrame):
     played = df[df["minutes"] > 0].copy()
 
     # Normalize was_home to boolean
-    played["is_home"] = played["was_home"].apply(
-        lambda x: x if isinstance(x, bool) else str(x).lower() == "true"
-    )
+    played["is_home"] = played["was_home"].apply(lambda x: x if isinstance(x, bool) else str(x).lower() == "true")
 
     # Home vs Away by position
     table = Table(title="Home vs Away: Avg Points by Position", box=box.SIMPLE_HEAVY)
@@ -587,9 +565,7 @@ def analyze_home_away_fdr(df: pd.DataFrame):
             # We'll use a simpler approach: group by FDR levels
             # Join on season + GW + opponent_team (opposing team ID)
             # Actually, let's just look at average points conceded BY FDR level
-            console.print(
-                "  Analyzing points scored against teams of each FDR level...\n"
-            )
+            console.print("  Analyzing points scored against teams of each FDR level...\n")
 
             # Merge: player's opponent_team = fixture's team_id, player's GW = fixture's GW
             merged_fdr = played.merge(
@@ -659,9 +635,7 @@ def analyze_consistency(df: pd.DataFrame):
     regulars = player_seasons[player_seasons["gws"] >= 20].copy()
 
     # Overall consistency stats
-    console.print(
-        "[bold]Consistency Stats (Players with ≥20 GWs in a season):[/bold]\n"
-    )
+    console.print("[bold]Consistency Stats (Players with ≥20 GWs in a season):[/bold]\n")
 
     table = Table(title="Consistency by Position", box=box.SIMPLE_HEAVY)
     table.add_column("Position", style="cyan")
@@ -689,9 +663,7 @@ def analyze_consistency(df: pd.DataFrame):
     # Top most consistent players (low CV, high total)
     top_consistent = regulars.nlargest(15, "total_pts").sort_values("cv")
 
-    console.print(
-        "\n[bold]Most Consistent Among Top Scorers (≥20 GWs, Top 15 by total pts):[/bold]"
-    )
+    console.print("\n[bold]Most Consistent Among Top Scorers (≥20 GWs, Top 15 by total pts):[/bold]")
     table2 = Table(box=box.SIMPLE)
     table2.add_column("Player", style="cyan")
     table2.add_column("Season")
@@ -750,9 +722,7 @@ def analyze_transfers(df: pd.DataFrame):
             .reset_index()
         )
         player_prices = player_prices[player_prices["gws"] >= 5]
-        player_prices["price_change"] = (
-            player_prices["end_price"] - player_prices["start_price"]
-        )
+        player_prices["price_change"] = player_prices["end_price"] - player_prices["start_price"]
 
         risers = (player_prices["price_change"] > 0).sum()
         fallers = (player_prices["price_change"] < 0).sum()
@@ -785,9 +755,9 @@ def analyze_ownership(df: pd.DataFrame):
 
         if len(valid) > 0:
             # Normalize selected within each GW (it's absolute count, so varies by season)
-            valid["ownership_pct"] = valid.groupby(["season", "GW"])[
-                "selected_num"
-            ].transform(lambda x: x / x.max() * 100 if x.max() > 0 else 0)
+            valid["ownership_pct"] = valid.groupby(["season", "GW"])["selected_num"].transform(
+                lambda x: x / x.max() * 100 if x.max() > 0 else 0
+            )
 
             ownership_bands = [(0, 10), (10, 25), (25, 50), (50, 75), (75, 100)]
 
@@ -800,9 +770,7 @@ def analyze_ownership(df: pd.DataFrame):
             table.add_column("Records", justify="right")
 
             for low, high in ownership_bands:
-                band = valid[
-                    (valid["ownership_pct"] >= low) & (valid["ownership_pct"] < high)
-                ]
+                band = valid[(valid["ownership_pct"] >= low) & (valid["ownership_pct"] < high)]
                 if len(band) > 0:
                     table.add_row(
                         f"{low}-{high}%",
@@ -833,8 +801,7 @@ def analyze_defensive_contribution(df: pd.DataFrame):
 
     console.print("[bold]Players earning defensive contribution bonus:[/bold]")
     console.print(
-        f"  Total GW entries with DC > 0: {len(has_dc):,} / {len(played):,} "
-        f"({len(has_dc) / len(played) * 100:.1f}%)"
+        f"  Total GW entries with DC > 0: {len(has_dc):,} / {len(played):,} ({len(has_dc) / len(played) * 100:.1f}%)"
     )
 
     if "position" in played.columns and len(has_dc) > 0:
@@ -1016,8 +983,7 @@ def main():  # noqa: D103
 
     console.print(
         Panel(
-            "[bold green]EDA Complete![/bold green]\n"
-            "Review findings above to inform the expected points model design.",
+            "[bold green]EDA Complete![/bold green]\nReview findings above to inform the expected points model design.",
             border_style="green",
         )
     )

@@ -4,9 +4,8 @@ PuLP Integer Linear Programming (ILP) Solver for FPL Squad Selection & Transfer 
 Formulates squad selection and transfer decisions as constrained integer linear programs.
 """
 
-from typing import List, Union
-import pulp  # type: ignore[import-untyped]
 import pandas as pd
+import pulp  # type: ignore[import-untyped]
 
 from fpl.models.player import PlayerStats
 from fpl.models.squad import (
@@ -33,7 +32,7 @@ from fpl.rules.constraints import (
 
 
 def optimize_squad(
-    players: Union[pd.DataFrame, List[PlayerStats]],
+    players: pd.DataFrame | list[PlayerStats],
     budget: float = TOTAL_BUDGET,
     club_limit: int = MAX_PER_TEAM,
     chip: ChipType = ChipType.NONE,
@@ -66,16 +65,14 @@ def optimize_squad(
 
     for pos_name, count in POSITION_LIMITS.items():
         prob += (
-            pulp.lpSum([player_vars[i] for i in df.index if df.loc[i, "position"] == pos_name])
-            == count,
+            pulp.lpSum([player_vars[i] for i in df.index if df.loc[i, "position"] == pos_name]) == count,
             f"Position_Limit_{pos_name}",
         )
 
     teams = df["team"].unique()
     for t_name in teams:
         prob += (
-            pulp.lpSum([player_vars[i] for i in df.index if df.loc[i, "team"] == t_name])
-            <= club_limit,
+            pulp.lpSum([player_vars[i] for i in df.index if df.loc[i, "team"] == t_name]) <= club_limit,
             f"Club_Limit_{t_name}",
         )
 
@@ -109,8 +106,7 @@ def optimize_starting_xi_and_bench(
     prob += (
         pulp.lpSum(
             [
-                df.loc[i, "target_xp"] * starter_vars[i]
-                + df.loc[i, "target_xp"] * cap_multiplier * captain_vars[i]
+                df.loc[i, "target_xp"] * starter_vars[i] + df.loc[i, "target_xp"] * cap_multiplier * captain_vars[i]
                 for i in df.index
             ]
         ),
@@ -120,9 +116,7 @@ def optimize_starting_xi_and_bench(
     prob += pulp.lpSum([starter_vars[i] for i in df.index]) == STARTING_XI_SIZE
 
     for pos, (min_req, max_req) in STARTING_XI_CONSTRAINTS.items():
-        pos_starters = pulp.lpSum(
-            [starter_vars[i] for i in df.index if df.loc[i, "position"] == pos]
-        )
+        pos_starters = pulp.lpSum([starter_vars[i] for i in df.index if df.loc[i, "position"] == pos])
         prob += pos_starters >= min_req
         prob += pos_starters <= max_req
 
@@ -145,12 +139,10 @@ def optimize_starting_xi_and_bench(
     bench_df = df[~df["is_starter"]].copy()
 
     bench_gkp = bench_df[bench_df["position"] == "GKP"]
-    bench_outfield = bench_df[bench_df["position"] != "GKP"].sort_values(
-        "target_xp", ascending=False
-    )
+    bench_outfield = bench_df[bench_df["position"] != "GKP"].sort_values("target_xp", ascending=False)
     ordered_bench_df = pd.concat([bench_gkp, bench_outfield])
 
-    starting_players: List[SelectedPlayer] = []
+    starting_players: list[SelectedPlayer] = []
     for _, row in starters_df.iterrows():
         stats = player_stats_from_series(row)
         proj = project_player_xp(stats)
@@ -163,7 +155,7 @@ def optimize_starting_xi_and_bench(
 
         starting_players.append(SelectedPlayer(projection=proj, role=role))
 
-    bench_players: List[SelectedPlayer] = []
+    bench_players: list[SelectedPlayer] = []
     for idx, (_, row) in enumerate(ordered_bench_df.iterrows(), start=1):
         stats = player_stats_from_series(row)
         proj = project_player_xp(stats)
@@ -177,9 +169,7 @@ def optimize_starting_xi_and_bench(
 
     starters_xp = sum(p.projection.total_xp for p in starting_players)
     cap_bonus = captain_proj.total_xp * (2.0 if chip == ChipType.TRIPLE_CAPTAIN else 1.0)
-    bboost_bonus = (
-        sum(p.projection.total_xp for p in bench_players) if chip == ChipType.BENCH_BOOST else 0.0
-    )
+    bboost_bonus = sum(p.projection.total_xp for p in bench_players) if chip == ChipType.BENCH_BOOST else 0.0
 
     total_xp = round(starters_xp + cap_bonus + bboost_bonus, 2)
     total_cost = round(float(df["cost"].sum()), 1)
@@ -197,8 +187,8 @@ def optimize_starting_xi_and_bench(
 
 
 def optimize_transfers(
-    current_squad: List[PlayerStats],
-    available_players: List[PlayerStats],
+    current_squad: list[PlayerStats],
+    available_players: list[PlayerStats],
     free_transfers: int = 1,
     max_transfers: int = 2,
     bank_budget: float = 0.0,
@@ -213,19 +203,17 @@ def optimize_transfers(
 
     baseline_squad_rec = optimize_squad(current_squad, budget=max_allowed_budget, chip=chip)
     best_net_gain = 0.0
-    best_transfers: List[SingleTransfer] = []
+    best_transfers: list[SingleTransfer] = []
     best_squad_rec = baseline_squad_rec
     best_hits_cost = 0
 
     if max_transfers <= 0 or chip in [ChipType.WILDCARD, ChipType.FREE_HIT]:
         new_squad_rec = optimize_squad(available_players, budget=max_allowed_budget, chip=chip)
-        new_squad_projections = [
-            p.projection for p in new_squad_rec.starting_xi + new_squad_rec.bench
-        ]
+        new_squad_projections = [p.projection for p in new_squad_rec.starting_xi + new_squad_rec.bench]
         new_ids = {p.player_id for p in new_squad_projections}
         out_ids = current_ids - new_ids
 
-        transfers_list: List[SingleTransfer] = []
+        transfers_list: list[SingleTransfer] = []
         curr_map = {p.id: p for p in current_squad}
         in_projections = [p for p in new_squad_projections if p.player_id not in current_ids]
 
@@ -253,8 +241,8 @@ def optimize_transfers(
             recommended_squad=new_squad_rec,
         )
 
-    out_candidates: List[PlayerStats] = list(current_squad)
-    in_candidates: List[PlayerStats] = [p for p in available_players if p.id not in current_ids]
+    out_candidates: list[PlayerStats] = list(current_squad)
+    in_candidates: list[PlayerStats] = [p for p in available_players if p.id not in current_ids]
 
     for n_transfers in range(1, max_transfers + 1):
         extra_transfers = max(0, n_transfers - free_transfers)
@@ -263,8 +251,7 @@ def optimize_transfers(
         for p_out in out_candidates:
             p_out_proj = project_player_xp(p_out)
             same_pos_in = [
-                p for p in in_candidates
-                if p.position == p_out.position and p.cost <= (p_out.cost + bank_budget)
+                p for p in in_candidates if p.position == p_out.position and p.cost <= (p_out.cost + bank_budget)
             ]
 
             for p_in in same_pos_in:
@@ -284,9 +271,7 @@ def optimize_transfers(
                     )
                     best_transfers = [single_tr]
                     new_squad_list = [p for p in current_squad if p.id != p_out.id] + [p_in]
-                    best_squad_rec = optimize_squad(
-                        new_squad_list, budget=max_allowed_budget, chip=chip
-                    )
+                    best_squad_rec = optimize_squad(new_squad_list, budget=max_allowed_budget, chip=chip)
 
     gross_gain = best_squad_rec.total_expected_points - baseline_squad_rec.total_expected_points
 

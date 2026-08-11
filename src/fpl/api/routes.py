@@ -2,9 +2,15 @@
 FastAPI Routes for FPL Team Creator Application.
 """
 
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, status
 
+from fpl.api.schemas import (
+    SquadRecommendRequest,
+    SquadRecommendResponse,
+    SyncResponse,
+    TransferRequest,
+    TransferResponse,
+)
 from fpl.client import FPLClient
 from fpl.data import load_players_df_from_db, sync_bootstrap_to_db
 from fpl.models.squad import ChipType
@@ -13,13 +19,6 @@ from fpl.optimizer import (
     optimize_squad,
     optimize_transfers,
     player_stats_from_series,
-)
-from fpl.api.schemas import (
-    SquadRecommendRequest,
-    SquadRecommendResponse,
-    SyncResponse,
-    TransferRequest,
-    TransferResponse,
 )
 
 router = APIRouter()
@@ -48,9 +47,9 @@ async def sync_data():
 
 @router.get("/players", summary="List & Filter Players")
 async def list_players(
-    position: Optional[str] = Query(None, description="Filter by position (GKP, DEF, MID, FWD)"),
-    team: Optional[str] = Query(None, description="Filter by team name"),
-    max_cost: Optional[float] = Query(None, description="Max cost limit in £m"),
+    position: str | None = Query(None, description="Filter by position (GKP, DEF, MID, FWD)"),
+    team: str | None = Query(None, description="Filter by team name"),
+    max_cost: float | None = Query(None, description="Max cost limit in £m"),
 ):
     """Retrieve player dataset with optional positional and pricing filters."""
     df = await load_players_df_from_db()
@@ -116,9 +115,7 @@ async def recommend_squad_post(req: SquadRecommendRequest):
     """
     Recommend 15-man squad via POST request using JSON body payload.
     """
-    return await _process_squad_recommendation(
-        budget=req.budget, club_limit=req.club_limit, chip=req.chip
-    )
+    return await _process_squad_recommendation(budget=req.budget, club_limit=req.club_limit, chip=req.chip)
 
 
 @router.post(

@@ -2,15 +2,10 @@
 Unit tests for Extended Expected Points Engine & Domain Models.
 """
 
-import pytest
-
 from fpl.models.player import FixtureContext, PlayerStats, Position
 from fpl.optimizer.expected_points import (
-    calculate_attack_xp,
-    calculate_defense_xp,
     calculate_defensive_contribution_xp,
     calculate_expected_minutes,
-    calculate_fixture_multiplier,
     project_player_xp,
 )
 
@@ -34,12 +29,26 @@ def test_player_stats_instantiation():
 
 def test_calculate_expected_minutes():
     nailed_player = PlayerStats(
-        id=1, web_name="Saliba", position=Position.DEF, team="Arsenal", cost=6.0, minutes=3420, total_points=180, points_per_game=5.0
+        id=1,
+        web_name="Saliba",
+        position=Position.DEF,
+        team="Arsenal",
+        cost=6.0,
+        minutes=3420,
+        total_points=180,
+        points_per_game=5.0,
     )
     assert calculate_expected_minutes(nailed_player) >= 85.0
 
     rotation_player = PlayerStats(
-        id=2, web_name="SubPlayer", position=Position.MID, team="Chelsea", cost=4.5, minutes=450, total_points=20, points_per_game=2.0
+        id=2,
+        web_name="SubPlayer",
+        position=Position.MID,
+        team="Chelsea",
+        cost=4.5,
+        minutes=450,
+        total_points=20,
+        points_per_game=2.0,
     )
     assert calculate_expected_minutes(rotation_player) < 60.0
 

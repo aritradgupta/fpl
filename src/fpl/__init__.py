@@ -3,10 +3,11 @@ FPL Team Creator Application.
 """
 
 from contextlib import asynccontextmanager
+
+import httpx
+import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
-import uvicorn
-import httpx
 
 from fpl.api import router as api_router
 from fpl.client import FPLClient

@@ -2,12 +2,14 @@
 Strongly Typed Player & Fixture Models for FPL Recommendation Engine.
 """
 
-from enum import Enum
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class Position(str, Enum):
+class Position(StrEnum):
     """Player position enumeration."""
+
     GKP = "GKP"
     DEF = "DEF"
     MID = "MID"
@@ -22,6 +24,7 @@ class Position(str, Enum):
 
 class FixtureContext(BaseModel):
     """Upcoming fixture context for a player."""
+
     model_config = ConfigDict(frozen=True)
 
     event_id: int = Field(..., description="Gameweek Event ID")
@@ -33,6 +36,7 @@ class FixtureContext(BaseModel):
 
 class PlayerStats(BaseModel):
     """Strongly typed player metrics container."""
+
     model_config = ConfigDict(frozen=True)
 
     id: int = Field(..., description="Unique FPL Player ID")
@@ -62,6 +66,7 @@ class PlayerStats(BaseModel):
 
 class PlayerProjection(BaseModel):
     """Detailed mathematical breakdown of calculated Expected Points (xP)."""
+
     model_config = ConfigDict(frozen=True)
 
     player_id: int

@@ -1,12 +1,12 @@
 """FPL rules package."""
 
 from fpl.rules.constraints import (
-    TOTAL_BUDGET,
-    SQUAD_SIZE,
     MAX_PER_TEAM,
     POSITION_LIMITS,
-    STARTING_XI_SIZE,
+    SQUAD_SIZE,
     STARTING_XI_CONSTRAINTS,
+    STARTING_XI_SIZE,
+    TOTAL_BUDGET,
     validate_squad_composition,
     validate_starting_xi,
 )

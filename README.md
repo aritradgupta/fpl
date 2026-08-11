@@ -2,7 +2,7 @@
 
 [![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![uv](https://img.shields.io/badge/managed_by-uv-000000.svg)](https://github.com/astral-sh/uv)
-[![Code Quality](https://img.shields.io/badge/pylint-10.0%2F10-brightgreen.svg)](https://www.pylint.org/)
+[![Linter](https://img.shields.io/badge/linter-ruff-red.svg)](https://github.com/astral-sh/ruff)
 [![Typing](https://img.shields.io/badge/mypy-checked-blue.svg)](http://mypy-lang.org/)
 [![Tests](https://img.shields.io/badge/tests-7%2F7%20passing-brightgreen.svg)](https://docs.pytest.org/)
 
@@ -39,7 +39,7 @@ The application combines a multi-component Expected Points (xP) projection model
 
 ## Project Architecture
 
-```
+```C
 d:\repos\fpl\
 ├── pyproject.toml               # Package configuration & tool settings (Pylint, Mypy, Pytest)
 ├── .gitignore                   # Version control ignore rules
@@ -143,10 +143,14 @@ uv run pytest tests/
 uv run mypy src/fpl
 ```
 
-### Run Linter (`pylint`)
+### Run Fast Linter & Formatter (`ruff`)
 
 ```bash
-uv run pylint src/fpl analysis
+# Check code for linting issues
+uv run ruff check .
+
+# Format all code files
+uv run ruff format .
 ```
 
 ---

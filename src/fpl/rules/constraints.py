@@ -7,15 +7,13 @@ Encodes all official Fantasy Premier League (2026-27) rules:
 - Transfer costs and chip rules
 """
 
-from typing import Dict, List, Tuple
-
 # Official 2026-27 Budget & Squad Limits
 TOTAL_BUDGET: float = 100.0  # £100.0m
 SQUAD_SIZE: int = 15
 MAX_PER_TEAM: int = 3
 
 # Positional Requirements for 15-man Squad
-POSITION_LIMITS: Dict[str, int] = {
+POSITION_LIMITS: dict[str, int] = {
     "GKP": 2,
     "DEF": 5,
     "MID": 5,
@@ -23,18 +21,18 @@ POSITION_LIMITS: Dict[str, int] = {
 }
 
 # Element type IDs in official API mapping
-ELEMENT_TYPE_MAP: Dict[int, str] = {
+ELEMENT_TYPE_MAP: dict[int, str] = {
     1: "GKP",
     2: "DEF",
     3: "MID",
     4: "FWD",
 }
 
-POSITION_NAME_TO_TYPE: Dict[str, int] = {v: k for k, v in ELEMENT_TYPE_MAP.items()}
+POSITION_NAME_TO_TYPE: dict[str, int] = {v: k for k, v in ELEMENT_TYPE_MAP.items()}
 
 # Formation Constraints for 11-man Starting XI
 STARTING_XI_SIZE: int = 11
-STARTING_XI_CONSTRAINTS: Dict[str, Tuple[int, int]] = {
+STARTING_XI_CONSTRAINTS: dict[str, tuple[int, int]] = {
     "GKP": (1, 1),
     "DEF": (3, 5),
     "MID": (2, 5),
@@ -47,7 +45,7 @@ MAX_BANKED_TRANSFERS: int = 5
 HIT_COST_PER_EXTRA_TRANSFER: int = 4
 
 # Scoring Matrix (points earned per action)
-SCORING_RULES: Dict[str, Dict[str, int]] = {
+SCORING_RULES: dict[str, dict[str, int]] = {
     "goals_scored": {"GKP": 10, "DEF": 6, "MID": 5, "FWD": 4},
     "assists": {"GKP": 3, "DEF": 3, "MID": 3, "FWD": 3},
     "clean_sheets": {"GKP": 4, "DEF": 4, "MID": 1, "FWD": 0},
@@ -61,7 +59,7 @@ SCORING_RULES: Dict[str, Dict[str, int]] = {
 }
 
 
-def validate_squad_composition(squad: List[Dict]) -> Tuple[bool, List[str]]:
+def validate_squad_composition(squad: list[dict]) -> tuple[bool, list[str]]:
     """
     Validate if a 15-man squad satisfies all official FPL rules.
 
@@ -71,7 +69,7 @@ def validate_squad_composition(squad: List[Dict]) -> Tuple[bool, List[str]]:
     Returns:
         (is_valid, list_of_error_messages)
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     if len(squad) != SQUAD_SIZE:
         errors.append(f"Squad must contain exactly {SQUAD_SIZE} players (got {len(squad)}).")
@@ -82,7 +80,7 @@ def validate_squad_composition(squad: List[Dict]) -> Tuple[bool, List[str]]:
         errors.append(f"Total squad cost (£{total_cost:.1f}m) exceeds budget (£{TOTAL_BUDGET:.1f}m).")
 
     # Check position counts
-    pos_counts: Dict[str, int] = {"GKP": 0, "DEF": 0, "MID": 0, "FWD": 0}
+    pos_counts: dict[str, int] = {"GKP": 0, "DEF": 0, "MID": 0, "FWD": 0}
     for p in squad:
         pos = p.get("position", "")
         if pos in pos_counts:
@@ -96,7 +94,7 @@ def validate_squad_composition(squad: List[Dict]) -> Tuple[bool, List[str]]:
             errors.append(f"Position '{pos}' requires exactly {required} players (got {actual}).")
 
     # Check team limits (max 3 per PL club)
-    team_counts: Dict[str, int] = {}
+    team_counts: dict[str, int] = {}
     for p in squad:
         team = str(p.get("team", ""))
         team_counts[team] = team_counts.get(team, 0) + 1
@@ -108,7 +106,7 @@ def validate_squad_composition(squad: List[Dict]) -> Tuple[bool, List[str]]:
     return len(errors) == 0, errors
 
 
-def validate_starting_xi(xi: List[Dict]) -> Tuple[bool, List[str]]:
+def validate_starting_xi(xi: list[dict]) -> tuple[bool, list[str]]:
     """
     Validate if an 11-man starting lineup is a valid FPL formation.
 
@@ -118,12 +116,12 @@ def validate_starting_xi(xi: List[Dict]) -> Tuple[bool, List[str]]:
     Returns:
         (is_valid, list_of_error_messages)
     """
-    errors: List[str] = []
+    errors: list[str] = []
 
     if len(xi) != STARTING_XI_SIZE:
         errors.append(f"Starting XI must contain exactly {STARTING_XI_SIZE} players (got {len(xi)}).")
 
-    pos_counts: Dict[str, int] = {"GKP": 0, "DEF": 0, "MID": 0, "FWD": 0}
+    pos_counts: dict[str, int] = {"GKP": 0, "DEF": 0, "MID": 0, "FWD": 0}
     for p in xi:
         pos = p.get("position", "")
         if pos in pos_counts:
@@ -132,8 +130,6 @@ def validate_starting_xi(xi: List[Dict]) -> Tuple[bool, List[str]]:
     for pos, (min_req, max_req) in STARTING_XI_CONSTRAINTS.items():
         actual = pos_counts.get(pos, 0)
         if actual < min_req or actual > max_req:
-            errors.append(
-                f"Starting XI '{pos}' count ({actual}) is out of valid range [{min_req}, {max_req}]."
-            )
+            errors.append(f"Starting XI '{pos}' count ({actual}) is out of valid range [{min_req}, {max_req}].")
 
     return len(errors) == 0, errors

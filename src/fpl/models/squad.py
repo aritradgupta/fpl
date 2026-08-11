@@ -2,22 +2,25 @@
 Strongly Typed Squad & Transfer Optimization Models.
 """
 
-from enum import Enum
-from typing import List, Optional
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field
+
 from fpl.models.player import PlayerProjection
 
 
-class SquadRole(str, Enum):
+class SquadRole(StrEnum):
     """Role assigned to a player in a recommended squad."""
+
     STARTER = "STARTER"
     CAPTAIN = "CAPTAIN"
     VICE_CAPTAIN = "VICE_CAPTAIN"
     BENCH = "BENCH"
 
 
-class ChipType(str, Enum):
+class ChipType(StrEnum):
     """FPL Chip strategy choices."""
+
     NONE = "none"
     WILDCARD = "wildcard"
     FREE_HIT = "freehit"
@@ -27,15 +30,17 @@ class ChipType(str, Enum):
 
 class SelectedPlayer(BaseModel):
     """A player included in a recommended squad with assigned role and projection."""
+
     model_config = ConfigDict(frozen=True)
 
     projection: PlayerProjection
     role: SquadRole
-    bench_order: Optional[int] = Field(default=None, description="1, 2, 3 or 4 if on bench")
+    bench_order: int | None = Field(default=None, description="1, 2, 3 or 4 if on bench")
 
 
 class SquadRecommendation(BaseModel):
     """Complete 15-man squad recommendation output."""
+
     model_config = ConfigDict(frozen=True)
 
     total_expected_points: float = Field(..., description="Projected total XI points (including captain 2x/3x)")
@@ -44,12 +49,13 @@ class SquadRecommendation(BaseModel):
     chip_active: ChipType = Field(default=ChipType.NONE, description="Chip activated for this Gameweek")
     captain: PlayerProjection
     vice_captain: PlayerProjection
-    starting_xi: List[SelectedPlayer]
-    bench: List[SelectedPlayer]
+    starting_xi: list[SelectedPlayer]
+    bench: list[SelectedPlayer]
 
 
 class SingleTransfer(BaseModel):
     """A single transfer action (one player out, one player in)."""
+
     model_config = ConfigDict(frozen=True)
 
     player_out: PlayerProjection
@@ -60,9 +66,10 @@ class SingleTransfer(BaseModel):
 
 class TransferRecommendation(BaseModel):
     """Optimal transfer decision recommendation across a gameweek horizon."""
+
     model_config = ConfigDict(frozen=True)
 
-    transfers: List[SingleTransfer]
+    transfers: list[SingleTransfer]
     transfers_count: int
     free_transfers_used: int
     hits_cost: int = Field(default=0, description="Point penalty (-4 per hit)")

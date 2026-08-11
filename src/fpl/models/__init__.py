@@ -1,17 +1,17 @@
 """Domain models package."""
 
 from fpl.models.player import (
-    Position,
     FixtureContext,
-    PlayerStats,
     PlayerProjection,
+    PlayerStats,
+    Position,
 )
 from fpl.models.squad import (
-    SquadRole,
     ChipType,
     SelectedPlayer,
-    SquadRecommendation,
     SingleTransfer,
+    SquadRecommendation,
+    SquadRole,
     TransferRecommendation,
 )
 

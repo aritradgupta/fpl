@@ -10,7 +10,6 @@ Implements an empirical Expected Points model derived from our 5-season EDA find
 6. Fixture Difficulty Rating (FDR) & Home/Away composite multipliers
 """
 
-from typing import List, Optional
 import numpy as np
 import pandas as pd
 
@@ -83,9 +82,7 @@ def calculate_defense_xp(stats: PlayerStats, position: Position, expected_mins: 
     return float(cs_prob * cs_weight)
 
 
-def calculate_defensive_contribution_xp(
-    stats: PlayerStats, position: Position, expected_mins: float
-) -> float:
+def calculate_defensive_contribution_xp(stats: PlayerStats, position: Position, expected_mins: float) -> float:
     """Calculate defensive contribution (CBIT/CBIRT) threshold expected points."""
     if position not in [Position.DEF, Position.MID] or expected_mins < 45.0:
         return 0.0
@@ -110,10 +107,7 @@ def calculate_bonus_xp(stats: PlayerStats, expected_mins: float) -> float:
     """Calculate expected Bonus Points System (BPS) returns."""
     mins_factor = expected_mins / 90.0
 
-    if stats.ict_index > 0:
-        bonus_per_90 = (stats.ict_index / 100.0) * 0.4
-    else:
-        bonus_per_90 = (stats.form / 10.0) * 0.3
+    bonus_per_90 = (stats.ict_index / 100.0) * 0.4 if stats.ict_index > 0 else (stats.form / 10.0) * 0.3
 
     return float(max(0.0, bonus_per_90 * mins_factor))
 
@@ -129,7 +123,7 @@ def calculate_fixture_multiplier(fixture: FixtureContext) -> float:
 
 def project_player_xp(
     stats: PlayerStats,
-    fixture: Optional[FixtureContext] = None,
+    fixture: FixtureContext | None = None,
 ) -> PlayerProjection:
     """Compute full multi-component Expected Points (xP) projection for a player."""
     if fixture is None:
@@ -180,6 +174,7 @@ def project_player_xp(
 # Pandas DataFrame / Series Compatibility API
 # ──────────────────────────────────────────────
 
+
 def player_stats_from_series(row: pd.Series) -> PlayerStats:
     """Construct a strongly typed PlayerStats object from a DataFrame row."""
     pos_raw = str(row.get("position", "MID")).upper()
@@ -208,12 +203,8 @@ def player_stats_from_series(row: pd.Series) -> PlayerStats:
         clean_sheets=int(row.get("clean_sheets", 0) or 0),
         selected_by_percent=float(row.get("selected_by_percent", 0.0) or 0.0),
         defensive_contribution_per_90=float(row.get("defensive_contribution_per_90", 0.0) or 0.0),
-        expected_goals_per_90=float(
-            row.get("expected_goals_per_90", row.get("expected_goals", 0.0)) or 0.0
-        ),
-        expected_assists_per_90=float(
-            row.get("expected_assists_per_90", row.get("expected_assists", 0.0)) or 0.0
-        ),
+        expected_goals_per_90=float(row.get("expected_goals_per_90", row.get("expected_goals", 0.0)) or 0.0),
+        expected_assists_per_90=float(row.get("expected_assists_per_90", row.get("expected_assists", 0.0)) or 0.0),
         ict_index=float(row.get("ict_index", 0.0) or 0.0),
     )
 
@@ -234,7 +225,7 @@ def enrich_df_with_xp(players_df: pd.DataFrame) -> pd.DataFrame:
     """Enrich a DataFrame of players with strongly typed projections."""
     df = players_df.copy()
 
-    projections: List[PlayerProjection] = []
+    projections: list[PlayerProjection] = []
     for _, row in df.iterrows():
         stats = player_stats_from_series(row)
         proj = project_player_xp(stats)

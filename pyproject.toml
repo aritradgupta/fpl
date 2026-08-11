@@ -31,18 +31,26 @@ build-backend = "uv_build"
 dev = [
     "mypy>=2.3.0",
     "pandas-stubs>=3.0.5.260730",
-    "pylint>=4.0.7",
     "pytest>=9.1.1",
+    "ruff>=0.16.2",
 ]
 
-[tool.pylint.main]
-init-hook = "import sys; sys.path.append('src')"
-max-line-length = 120
-disable = [
-    "too-many-locals",
-    "too-many-arguments",
-    "too-many-positional-arguments",
-    "too-many-branches",
-    "too-many-statements",
-    "duplicate-code",
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+src = ["src", "analysis", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+]
+ignore = [
+    "E501", # line length handled by ruff format
+    "B008", # FastAPI Query/Field parameter defaults idiom
 ]
