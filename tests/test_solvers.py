@@ -5,8 +5,8 @@ Unit tests for Multi-Version Solver Suite (Single, Multi-Period, Stochastic, Gen
 import pytest
 
 from fpl.models.player import PlayerStats, Position
-from fpl.models.squad import SolverType
-from fpl.optimizer import optimize_squad
+from fpl.models.squad import ChipType, SolverType
+from fpl.optimizer import optimize_multi_period_plan, optimize_squad
 
 
 @pytest.fixture
@@ -108,3 +108,37 @@ def test_all_solvers_produce_valid_squads(mock_player_pool: list[PlayerStats], s
     assert len(rec.bench) == 4
     assert rec.total_cost <= 100.0
     assert rec.total_expected_points > 0.0
+
+
+def test_transfer_aware_horizon_preserves_squad_continuity(mock_player_pool: list[PlayerStats]) -> None:
+    initial = optimize_squad(mock_player_pool, budget=100.0)
+    current_ids = [p.projection.player_id for p in initial.starting_xi + initial.bench]
+
+    plan = optimize_multi_period_plan(
+        mock_player_pool,
+        gameweeks=[1, 2, 3],
+        current_squad_ids=current_ids,
+        budget=100.0,
+        bank_budget=0.0,
+        max_transfers_per_gameweek=2,
+    )
+
+    assert len(plan.gameweeks) == 3
+    assert plan.total_hits == sum(week.hits for week in plan.gameweeks)
+    for previous, current in zip(plan.gameweeks, plan.gameweeks[1:], strict=False):
+        expected_ids = (set(previous.squad_player_ids) - set(current.transfers_out)) | set(current.transfers_in)
+        assert expected_ids == set(current.squad_player_ids)
+        assert len(current.transfers_in) <= 2
+
+
+def test_transfer_aware_horizon_supports_bench_boost(mock_player_pool: list[PlayerStats]) -> None:
+    plan = optimize_multi_period_plan(
+        mock_player_pool,
+        gameweeks=[1, 2],
+        chip=ChipType.BENCH_BOOST,
+        chip_gameweek=2,
+        budget=100.0,
+    )
+
+    assert plan.gameweeks[0].chip == ChipType.NONE
+    assert plan.gameweeks[1].chip == ChipType.BENCH_BOOST

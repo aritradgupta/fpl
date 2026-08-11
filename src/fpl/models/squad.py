@@ -85,3 +85,33 @@ class TransferRecommendation(BaseModel):
     gross_xp_gain: float = Field(..., description="Gross expected points gain before hits")
     net_xp_gain: float = Field(..., description="Net expected points gain after hit penalty")
     recommended_squad: SquadRecommendation
+
+
+class HorizonGameweekRecommendation(BaseModel):
+    """Machine-readable plan for one gameweek in a multi-week strategy."""
+
+    model_config = ConfigDict(frozen=True)
+
+    gameweek: int
+    squad_player_ids: list[int]
+    starting_player_ids: list[int]
+    captain_id: int
+    vice_captain_id: int
+    transfers_in: list[int]
+    transfers_out: list[int]
+    free_transfers_used: int
+    hits: int
+    expected_points: float
+    chip: ChipType = ChipType.NONE
+
+
+class HorizonRecommendation(BaseModel):
+    """Complete transfer-aware multi-gameweek recommendation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    total_expected_points: float
+    total_hits: int
+    initial_bank: float
+    final_bank: float
+    gameweeks: list[HorizonGameweekRecommendation]
