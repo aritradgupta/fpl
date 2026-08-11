@@ -176,6 +176,18 @@ uv run ruff format .
 
 ---
 
+## GPU Acceleration (NVIDIA CUDA)
+
+To enable hardware tensor acceleration for Monte Carlo simulations on NVIDIA GPUs (e.g., RTX 4060):
+
+```bash
+uv add torch
+```
+
+`pyproject.toml` is configured with the official PyTorch CUDA index for Windows (`pytorch-cu124`). Once installed, [`src/fpl/optimizer/gpu.py`](file:///d:/repos/fpl/src/fpl/optimizer/gpu.py) automatically utilizes your GPU!
+
+---
+
 ## License
 
 MIT License. Developed for EPL Fantasy Premier League 2026-27 team management.
