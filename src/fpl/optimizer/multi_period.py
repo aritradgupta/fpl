@@ -10,8 +10,14 @@ import pulp  # type: ignore[import-untyped]
 
 from fpl.models.player import PlayerStats
 from fpl.models.squad import ChipType, SquadRecommendation
-from fpl.optimizer.expected_points import enrich_df_with_xp
-from fpl.optimizer.single_period import optimize_starting_xi_and_bench, prepare_players, require_optimal
+from fpl.optimizer.expected_points import enrich_df_with_fixture_xp, enrich_df_with_xp
+from fpl.optimizer.pulp_compat import binary_variables, cbc_solver
+from fpl.optimizer.single_period import (
+    optimize_starting_xi_and_bench,
+    prepare_players,
+    require_optimal,
+    resolve_player_indices,
+)
 from fpl.rules.constraints import MAX_PER_TEAM, POSITION_LIMITS, SQUAD_SIZE, TOTAL_BUDGET
 
 
@@ -22,8 +28,9 @@ def optimize_multi_period_squad(
     chip: ChipType = ChipType.NONE,
     horizon_weeks: int = 3,
     decay_factor: float = 0.90,
-    lock_players: list[str] | None = None,
-    exclude_players: list[str] | None = None,
+    lock_players: list[str | int] | None = None,
+    exclude_players: list[str | int] | None = None,
+    fixtures_df: pd.DataFrame | None = None,
 ) -> SquadRecommendation:
     """
     Select a squad optimizing cumulative expected points across a multi-gameweek horizon.
@@ -32,21 +39,26 @@ def optimize_multi_period_squad(
     """
     if horizon_weeks < 1 or horizon_weeks > 10:
         raise ValueError("horizon_weeks must be between 1 and 10.")
+    if not 0.0 < decay_factor <= 1.0:
+        raise ValueError("decay_factor must be greater than 0 and at most 1.")
 
     df = prepare_players(players)
     df = enrich_df_with_xp(df)
 
+    if fixtures_df is not None:
+        df = enrich_df_with_fixture_xp(df, fixtures_df, range(1, horizon_weeks + 1))
+
     # Compute multi-week discounted target xP
     multi_xp: list[float] = []
     for _, row in df.iterrows():
-        base_xp = float(row.get("target_xp", row.get("calculated_xp", 0.0)))
-        discounted_sum = sum(base_xp * (decay_factor**w) for w in range(horizon_weeks))
+        weekly_xp = [float(row.get(f"xp_gw_{gw}", row.get("target_xp", 0.0))) for gw in range(1, horizon_weeks + 1)]
+        discounted_sum = sum(xp * (decay_factor**w) for w, xp in enumerate(weekly_xp))
         multi_xp.append(discounted_sum)
 
     df["multi_target_xp"] = multi_xp
 
     prob = pulp.LpProblem("FPL_Multi_Period_Squad_Optimizer", pulp.LpMaximize)
-    player_vars = pulp.LpVariable.dicts("squad", df.index, cat=pulp.LpBinary)
+    player_vars = binary_variables(prob, "squad", df.index)
 
     prob += (
         pulp.lpSum([df.loc[i, "multi_target_xp"] * player_vars[i] for i in df.index]),
@@ -73,19 +85,12 @@ def optimize_multi_period_squad(
         )
 
     # Lock / Exclude player constraints
-    if lock_players:
-        for p_name in lock_players:
-            match_idx = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
-            for i in match_idx:
-                prob += player_vars[i] == 1, f"Lock_Player_{i}"
+    for i in resolve_player_indices(df, lock_players):
+        prob += player_vars[i] == 1, f"Lock_Player_{i}"
+    for i in resolve_player_indices(df, exclude_players):
+        prob += player_vars[i] == 0, f"Exclude_Player_{i}"
 
-    if exclude_players:
-        for p_name in exclude_players:
-            match_idx = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
-            for i in match_idx:
-                prob += player_vars[i] == 0, f"Exclude_Player_{i}"
-
-    prob.solve(pulp.PULP_CBC_CMD(msg=False))
+    prob.solve(cbc_solver())
     require_optimal(prob, "Multi-period squad optimization")
 
     selected_indices = [i for i in df.index if player_vars[i].varValue is not None and player_vars[i].varValue > 0.5]

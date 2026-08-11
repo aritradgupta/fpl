@@ -14,7 +14,13 @@ from fpl.models.player import PlayerStats
 from fpl.models.squad import ChipType, SquadRecommendation
 from fpl.optimizer.expected_points import enrich_df_with_xp
 from fpl.optimizer.gpu import simulate_scenarios_gpu
-from fpl.optimizer.single_period import optimize_starting_xi_and_bench, prepare_players, require_optimal
+from fpl.optimizer.pulp_compat import binary_variables, cbc_solver
+from fpl.optimizer.single_period import (
+    optimize_starting_xi_and_bench,
+    prepare_players,
+    require_optimal,
+    resolve_player_indices,
+)
 from fpl.rules.constraints import MAX_PER_TEAM, POSITION_LIMITS, SQUAD_SIZE, TOTAL_BUDGET
 
 
@@ -26,8 +32,8 @@ def optimize_stochastic_squad(
     risk_aversion: float = 0.15,
     num_scenarios: int = 1000,
     use_gpu: bool = True,
-    lock_players: list[str] | None = None,
-    exclude_players: list[str] | None = None,
+    lock_players: list[str | int] | None = None,
+    exclude_players: list[str | int] | None = None,
 ) -> SquadRecommendation:
     """
     Select an optimal squad maximizing risk-adjusted utility (Mean_xP - risk_aversion * Variance).
@@ -54,7 +60,7 @@ def optimize_stochastic_squad(
     df["stochastic_utility"] = utility_scores
 
     prob = pulp.LpProblem("FPL_Stochastic_Squad_Optimizer", pulp.LpMaximize)
-    player_vars = pulp.LpVariable.dicts("squad", df.index, cat=pulp.LpBinary)
+    player_vars = binary_variables(prob, "squad", df.index)
 
     prob += (
         pulp.lpSum([df.loc[i, "stochastic_utility"] * player_vars[i] for i in df.index]),
@@ -81,22 +87,16 @@ def optimize_stochastic_squad(
         )
 
     # Lock / Exclude player constraints
-    if lock_players:
-        for p_name in lock_players:
-            match_idx = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
-            for i in match_idx:
-                prob += player_vars[i] == 1, f"Lock_Player_{i}"
+    for i in resolve_player_indices(df, lock_players):
+        prob += player_vars[i] == 1, f"Lock_Player_{i}"
+    for i in resolve_player_indices(df, exclude_players):
+        prob += player_vars[i] == 0, f"Exclude_Player_{i}"
 
-    if exclude_players:
-        for p_name in exclude_players:
-            match_idx = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
-            for i in match_idx:
-                prob += player_vars[i] == 0, f"Exclude_Player_{i}"
-
-    prob.solve(pulp.PULP_CBC_CMD(msg=False))
+    prob.solve(cbc_solver())
     require_optimal(prob, "Stochastic squad optimization")
 
     selected_indices = [i for i in df.index if player_vars[i].varValue is not None and player_vars[i].varValue > 0.5]
     selected_df = df.loc[selected_indices].copy()
 
     return optimize_starting_xi_and_bench(selected_df, chip=chip)
+

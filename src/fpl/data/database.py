@@ -28,6 +28,7 @@ async def init_db(db_path: Path = DB_PATH) -> None:
                 second_name TEXT,
                 position TEXT,
                 team TEXT,
+                team_id INTEGER,
                 team_code INTEGER,
                 cost REAL,
                 ep_next REAL,
@@ -52,6 +53,9 @@ async def init_db(db_path: Path = DB_PATH) -> None:
                 strength_overall_away INTEGER
             )
         """)
+        columns = {row[1] for row in await db.execute_fetchall("PRAGMA table_info(players)")}
+        if "team_id" not in columns:
+            await db.execute("ALTER TABLE players ADD COLUMN team_id INTEGER DEFAULT 0")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS sync_meta (
                 key TEXT PRIMARY KEY,
@@ -99,10 +103,10 @@ async def sync_bootstrap_to_db(bootstrap_data: dict, db_path: Path = DB_PATH) ->
             await db.execute(
                 """
                 INSERT OR REPLACE INTO players (
-                    id, web_name, first_name, second_name, position, team, team_code,
+                    id, web_name, first_name, second_name, position, team, team_id, team_code,
                     cost, ep_next, form, points_per_game, total_points, minutes,
                     goals_scored, assists, clean_sheets, selected_by_percent, raw_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     p["id"],
@@ -111,6 +115,7 @@ async def sync_bootstrap_to_db(bootstrap_data: dict, db_path: Path = DB_PATH) ->
                     p.get("second_name", ""),
                     pos,
                     team_name,
+                    p.get("team", 0),
                     p.get("team_code", 0),
                     cost,
                     float(p.get("ep_next") or 0.0),

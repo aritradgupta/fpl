@@ -46,8 +46,9 @@ def optimize_squad(
     generations: int = 50,
     population_size: int = 60,
     seed: int | None = 42,
-    lock_players: list[str] | None = None,
-    exclude_players: list[str] | None = None,
+    lock_players: list[str | int] | None = None,
+    exclude_players: list[str | int] | None = None,
+    fixtures_df: pd.DataFrame | None = None,
 ) -> SquadRecommendation:
     """
     Select an optimal 15-player FPL squad using the specified solver strategy.
@@ -67,6 +68,7 @@ def optimize_squad(
             horizon_weeks=horizon_weeks,
             lock_players=lock_players,
             exclude_players=exclude_players,
+            fixtures_df=fixtures_df,
         )
     if solver_type == SolverType.STOCHASTIC:
         return optimize_stochastic_squad(

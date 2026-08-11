@@ -19,7 +19,7 @@ from fpl.models.player import PlayerStats
 from fpl.models.squad import ChipType, SquadRecommendation
 from fpl.optimizer.expected_points import enrich_df_with_xp
 from fpl.optimizer.gpu import evaluate_population_gpu
-from fpl.optimizer.single_period import optimize_starting_xi_and_bench, prepare_players
+from fpl.optimizer.single_period import optimize_starting_xi_and_bench, prepare_players, resolve_player_indices
 from fpl.rules.constraints import MAX_PER_TEAM, POSITION_LIMITS, SQUAD_SIZE, TOTAL_BUDGET
 
 
@@ -29,8 +29,8 @@ def _repair_squad_chromosome(
     budget: float,
     club_limit: int,
     rng: np.random.Generator,
-    lock_players: list[str] | None = None,
-    exclude_players: list[str] | None = None,
+    lock_players: list[str | int] | None = None,
+    exclude_players: list[str | int] | None = None,
 ) -> list[int]:
     """
     Repair chromosome to satisfy exact 15-man position limits, budget, and club constraints,
@@ -39,16 +39,10 @@ def _repair_squad_chromosome(
     selected = {int(i) for i in indices}
 
     locked_indices: set[int] = set()
-    if lock_players:
-        for p_name in lock_players:
-            match = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
-            locked_indices.update(set(match))
+    locked_indices.update(resolve_player_indices(df, lock_players))
 
     excluded_indices: set[int] = set()
-    if exclude_players:
-        for p_name in exclude_players:
-            match = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
-            excluded_indices.update(set(match))
+    excluded_indices.update(resolve_player_indices(df, exclude_players))
 
     # Remove excluded players and add locked players
     selected -= excluded_indices
@@ -261,8 +255,8 @@ def optimize_genetic_squad(
     initial_mutation_rate: float = 0.30,
     seed: int | None = 42,
     use_gpu: bool = True,
-    lock_players: list[str] | None = None,
-    exclude_players: list[str] | None = None,
+    lock_players: list[str | int] | None = None,
+    exclude_players: list[str | int] | None = None,
 ) -> SquadRecommendation:
     """
     Select an optimal squad using a State-of-the-Art Hybrid Memetic Genetic Algorithm (GPU Vectorized).

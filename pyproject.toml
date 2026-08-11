@@ -36,6 +36,9 @@ dev = [
     "ruff>=0.16.2",
 ]
 
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
+
 [[tool.uv.index]]
 name = "pytorch-cu124"
 url = "https://download.pytorch.org/whl/cu124"

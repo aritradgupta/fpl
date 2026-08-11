@@ -2,10 +2,13 @@
 Unit tests for Extended Expected Points Engine & Domain Models.
 """
 
+import pandas as pd
+
 from fpl.models.player import FixtureContext, PlayerStats, Position
 from fpl.optimizer.expected_points import (
     calculate_defensive_contribution_xp,
     calculate_expected_minutes,
+    enrich_df_with_fixture_xp,
     project_player_xp,
 )
 
@@ -94,3 +97,29 @@ def test_project_player_xp_breakdown():
     assert proj.clean_sheet_xp == 0.0  # Forwards get 0 clean sheet points
     assert proj.fixture_multiplier > 1.0  # FDR 2 at home should give positive multiplier
     assert proj.total_xp > 5.0
+
+
+def test_fixture_enrichment_handles_blank_and_double_gameweeks():
+    players = pd.DataFrame([
+        {
+            "id": 1,
+            "web_name": "Saka",
+            "position": "MID",
+            "team": "Arsenal",
+            "team_id": 1,
+            "cost": 8.0,
+            "minutes": 900,
+            "total_points": 50,
+            "points_per_game": 5.0,
+        },
+    ])
+    fixtures = pd.DataFrame([
+        {"event": 1, "team_h": 1, "team_a": 2, "team_h_difficulty": 3, "team_a_difficulty": 4},
+        {"event": 1, "team_h": 3, "team_a": 1, "team_h_difficulty": 3, "team_a_difficulty": 2},
+    ])
+
+    result = enrich_df_with_fixture_xp(players, fixtures, [1, 2])
+
+    assert result.loc[0, "xp_gw_1"] > 0.0
+    assert result.loc[0, "xp_gw_2"] == 0.0
+    assert result.loc[0, "horizon_xp"] == result.loc[0, "xp_gw_1"]

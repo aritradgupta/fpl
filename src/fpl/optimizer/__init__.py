@@ -8,9 +8,11 @@ from fpl.optimizer.expected_points import (
     calculate_expected_minutes,
     calculate_fixture_multiplier,
     calculate_player_xp,
+    enrich_df_with_fixture_xp,
     enrich_df_with_xp,
     player_stats_from_series,
     project_player_xp,
+    project_player_xp_for_fixtures,
 )
 from fpl.optimizer.genetic import optimize_genetic_squad
 from fpl.optimizer.multi_period import optimize_multi_period_squad
@@ -31,9 +33,11 @@ __all__ = [
     "calculate_bonus_xp",
     "calculate_fixture_multiplier",
     "project_player_xp",
+    "project_player_xp_for_fixtures",
     "player_stats_from_series",
     "calculate_player_xp",
     "enrich_df_with_xp",
+    "enrich_df_with_fixture_xp",
     "optimize_squad",
     "optimize_single_period_squad",
     "optimize_multi_period_squad",

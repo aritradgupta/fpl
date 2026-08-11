@@ -45,6 +45,7 @@ class PlayerStats(BaseModel):
     second_name: str = Field(default="", description="Player last name")
     position: Position = Field(..., description="Playing position (GKP, DEF, MID, FWD)")
     team: str = Field(..., description="Club name (e.g. Arsenal)")
+    team_id: int = Field(default=0, ge=0, description="Official FPL club ID")
     team_code: int = Field(default=0, description="Club numerical code")
     cost: float = Field(..., ge=3.5, le=16.0, description="Current price in £m (e.g. 5.5)")
     ep_next: float = Field(default=0.0, ge=0.0, description="FPL official next GW expected points")

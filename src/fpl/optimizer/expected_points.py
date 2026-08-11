@@ -10,6 +10,8 @@ Implements an empirical Expected Points model derived from our 5-season EDA find
 6. Fixture Difficulty Rating (FDR) & Home/Away composite multipliers
 """
 
+from collections.abc import Iterable
+
 import pandas as pd
 
 from fpl.models.player import (
@@ -193,6 +195,7 @@ def player_stats_from_series(row: pd.Series) -> PlayerStats:
         second_name=str(row.get("second_name", "")),
         position=pos,
         team=str(row.get("team", "Unknown")),
+        team_id=int(row.get("team_id", 0) or 0),
         team_code=int(row.get("team_code", 0)),
         cost=cost_val,
         ep_next=float(row.get("ep_next", 0.0) or 0.0),
@@ -221,6 +224,62 @@ def calculate_player_xp(
     fixture = FixtureContext(event_id=1, opponent_team_id=0, fdr=fdr, is_home=is_home)
     projection = project_player_xp(stats, fixture)
     return projection.total_xp
+
+
+def project_player_xp_for_fixtures(stats: PlayerStats, fixtures: Iterable[FixtureContext]) -> float:
+    """Sum fixture-adjusted projections for a gameweek.
+
+    An empty fixture collection is a blank gameweek; multiple fixtures are a
+    double gameweek and are summed.
+    """
+    return round(sum(project_player_xp(stats, fixture).total_xp for fixture in fixtures), 2)
+
+
+def enrich_df_with_fixture_xp(
+    players_df: pd.DataFrame,
+    fixtures_df: pd.DataFrame,
+    gameweeks: Iterable[int],
+) -> pd.DataFrame:
+    """Add official-fixture-aware xP columns, including blanks and doubles."""
+    required = {"event", "team_h", "team_a"}
+    missing = required - set(fixtures_df.columns)
+    if missing:
+        raise ValueError(f"Fixture data is missing required columns: {', '.join(sorted(missing))}.")
+
+    df = players_df.copy()
+    fixture_rows = fixtures_df.copy()
+    fixture_rows["event"] = pd.to_numeric(fixture_rows["event"], errors="coerce")
+    fixture_rows = fixture_rows.dropna(subset=["event"])
+    fixture_rows["event"] = fixture_rows["event"].astype(int)
+    gw_list = list(dict.fromkeys(int(gw) for gw in gameweeks))
+
+    for gw in gw_list:
+        values: list[float] = []
+        week_fixtures = fixture_rows[fixture_rows["event"] == gw]
+        for _, player_row in df.iterrows():
+            stats = player_stats_from_series(player_row)
+            contexts: list[FixtureContext] = []
+            for _, fixture in week_fixtures.iterrows():
+                if stats.team_id == int(fixture["team_h"]):
+                    contexts.append(FixtureContext(
+                        event_id=gw,
+                        opponent_team_id=int(fixture["team_a"]),
+                        fdr=int(fixture.get("team_h_difficulty", 3) or 3),
+                        is_home=True,
+                    ))
+                elif stats.team_id == int(fixture["team_a"]):
+                    contexts.append(FixtureContext(
+                        event_id=gw,
+                        opponent_team_id=int(fixture["team_h"]),
+                        fdr=int(fixture.get("team_a_difficulty", 3) or 3),
+                        is_home=False,
+                    ))
+            values.append(project_player_xp_for_fixtures(stats, contexts))
+        df[f"xp_gw_{gw}"] = values
+
+    xp_columns = [f"xp_gw_{gw}" for gw in gw_list]
+    df["horizon_xp"] = df[xp_columns].sum(axis=1) if xp_columns else 0.0
+    return df
 
 
 def enrich_df_with_xp(players_df: pd.DataFrame) -> pd.DataFrame:
