@@ -1,13 +1,16 @@
 """
-FPL GW1 2026-27 Squad Recommendation Script (Upgraded & Strongly Typed).
+FPL GW1 2026-27 Squad Recommendation Script (Multi-Solver Suite Support).
 
-Syncs live data from the official FPL API, computes multi-component Expected Points,
-and runs the PuLP Integer Program to output the optimal £100.0m 15-player squad,
-starting XI, Captain, and Bench order.
+Syncs live data from official FPL API and runs your choice of solver model:
+- single_period: Fast 0-1 PuLP Integer Linear Program
+- multi_period: Multi-Gameweek Horizon ILP Solver
+- stochastic: Monte Carlo Scenario Risk Solver
+- genetic: Metaheuristic Evolutionary Algorithm
 
-Run with: uv run python scripts/recommend_squad.py
+Run: uv run python scripts/recommend_squad.py --solver single_period
 """
 
+import argparse
 import asyncio
 import sys
 
@@ -21,15 +24,16 @@ from rich.table import Table
 
 from fpl.client import FPLClient
 from fpl.data import load_players_df_from_db, sync_bootstrap_to_db
+from fpl.models.squad import SolverType
 from fpl.optimizer import optimize_squad
 
 console = Console(width=120)
 
 
-async def generate_recommendation():
+async def generate_recommendation(solver_type: str = "single_period"):
     console.print(
         Panel(
-            "[bold green]FPL 2026-27 Team Creator — Upgraded Recommendation Engine[/bold green]\n"
+            f"[bold green]FPL 2026-27 Team Creator — Solver Model: [{solver_type.upper()}][/bold green]\n"
             "Fetching live player prices & projections from Fantasy Premier League API...",
             border_style="green",
         )
@@ -48,12 +52,12 @@ async def generate_recommendation():
     # 2. Load players
     players_df = await load_players_df_from_db()
 
-    # 3. Run solver producing strongly typed SquadRecommendation
-    squad_rec = optimize_squad(players_df, budget=100.0)
+    # 3. Run selected solver strategy
+    squad_rec = optimize_squad(players_df, budget=100.0, solver_type=solver_type)
 
     # 4. Print 15-Man Squad Summary Table
     table = Table(
-        title=f"Optimal 15-Man Squad (Budget: £{squad_rec.total_cost:.1f}m / £100.0m | Projected XI xP: {squad_rec.total_expected_points:.2f})",
+        title=f"Optimal Squad [{solver_type.upper()}] (Cost: £{squad_rec.total_cost:.1f}m / £100.0m | XI xP: {squad_rec.total_expected_points:.2f})",
         border_style="cyan",
     )
     table.add_column("Role", style="magenta", justify="center")
@@ -103,5 +107,18 @@ async def generate_recommendation():
     )
 
 
+def main():
+    parser = argparse.ArgumentParser(description="FPL Squad Recommendation CLI")
+    parser.add_argument(
+        "--solver",
+        type=str,
+        default="single_period",
+        choices=[s.value for s in SolverType],
+        help="Solver model strategy: single_period, multi_period, stochastic, genetic",
+    )
+    args = parser.parse_args()
+    asyncio.run(generate_recommendation(solver_type=args.solver))
+
+
 if __name__ == "__main__":
-    asyncio.run(generate_recommendation())
+    main()

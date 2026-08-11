@@ -5,7 +5,7 @@ Pydantic API Request & Response Schemas for FPL Team Creator.
 from pydantic import BaseModel, Field
 
 from fpl.models.player import Position
-from fpl.models.squad import ChipType, SquadRole
+from fpl.models.squad import ChipType, SolverType, SquadRole
 
 
 class PlayerProjectionOut(BaseModel):
@@ -40,6 +40,7 @@ class SquadRecommendRequest(BaseModel):
     budget: float = Field(default=100.0, ge=50.0, le=120.0, description="Squad budget limit in £m")
     club_limit: int = Field(default=3, ge=1, le=5, description="Max players allowed per PL club")
     chip: ChipType = Field(default=ChipType.NONE, description="Active chip (none, wildcard, freehit, bboost, 3xc)")
+    solver_type: SolverType = Field(default=SolverType.SINGLE_PERIOD, description="Solver model strategy")
 
 
 class SquadRecommendResponse(BaseModel):
@@ -63,6 +64,7 @@ class TransferRequest(BaseModel):
     max_transfers: int = Field(default=2, ge=1, le=3, description="Max transfers to evaluate")
     bank_budget: float = Field(default=0.0, ge=0.0, le=20.0, description="Bank balance in £m")
     chip: ChipType = Field(default=ChipType.NONE, description="Active chip strategy")
+    solver_type: SolverType = Field(default=SolverType.SINGLE_PERIOD, description="Solver model strategy")
 
 
 class SingleTransferOut(BaseModel):

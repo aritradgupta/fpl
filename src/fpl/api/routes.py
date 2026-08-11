@@ -13,7 +13,7 @@ from fpl.api.schemas import (
 )
 from fpl.client import FPLClient
 from fpl.data import load_players_df_from_db, sync_bootstrap_to_db
-from fpl.models.squad import ChipType
+from fpl.models.squad import ChipType, SolverType
 from fpl.optimizer import (
     enrich_df_with_xp,
     optimize_squad,
@@ -70,7 +70,7 @@ async def list_players(
     return df.to_dict("records")
 
 
-async def _process_squad_recommendation(budget: float, club_limit: int, chip: ChipType):
+async def _process_squad_recommendation(budget: float, club_limit: int, chip: ChipType, solver_type: SolverType):
     """Shared handler for squad optimization."""
     df = await load_players_df_from_db()
     if df.empty:
@@ -79,7 +79,7 @@ async def _process_squad_recommendation(budget: float, club_limit: int, chip: Ch
         df = await load_players_df_from_db()
 
     try:
-        rec = optimize_squad(df, budget=budget, club_limit=club_limit, chip=chip)
+        rec = optimize_squad(df, budget=budget, club_limit=club_limit, chip=chip, solver_type=solver_type)
         return rec.model_dump()
     except Exception as e:
         raise HTTPException(
@@ -98,11 +98,12 @@ async def recommend_squad_get(
     budget: float = Query(100.0, ge=50.0, le=120.0, description="Squad budget limit in £m"),
     club_limit: int = Query(3, ge=1, le=5, description="Max players allowed per PL club"),
     chip: ChipType = Query(ChipType.NONE, description="Active chip (none, wildcard, freehit, bboost, 3xc)"),
+    solver_type: SolverType = Query(SolverType.SINGLE_PERIOD, description="Solver strategy model"),
 ):
     """
     Recommend 15-man squad via GET request using URL query parameters.
     """
-    return await _process_squad_recommendation(budget=budget, club_limit=club_limit, chip=chip)
+    return await _process_squad_recommendation(budget=budget, club_limit=club_limit, chip=chip, solver_type=solver_type)
 
 
 @router.post(
@@ -115,7 +116,9 @@ async def recommend_squad_post(req: SquadRecommendRequest):
     """
     Recommend 15-man squad via POST request using JSON body payload.
     """
-    return await _process_squad_recommendation(budget=req.budget, club_limit=req.club_limit, chip=req.chip)
+    return await _process_squad_recommendation(
+        budget=req.budget, club_limit=req.club_limit, chip=req.chip, solver_type=req.solver_type
+    )
 
 
 @router.post(
@@ -153,6 +156,7 @@ async def recommend_transfers(req: TransferRequest):
             max_transfers=req.max_transfers,
             bank_budget=req.bank_budget,
             chip=req.chip,
+            solver_type=req.solver_type,
         )
         return transfer_rec.model_dump()
     except Exception as e:

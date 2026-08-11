@@ -28,6 +28,15 @@ class ChipType(StrEnum):
     TRIPLE_CAPTAIN = "3xc"
 
 
+class SolverType(StrEnum):
+    """Available squad recommendation solver models."""
+
+    SINGLE_PERIOD = "single_period"
+    MULTI_PERIOD = "multi_period"
+    STOCHASTIC = "stochastic"
+    GENETIC = "genetic"
+
+
 class SelectedPlayer(BaseModel):
     """A player included in a recommended squad with assigned role and projection."""
 

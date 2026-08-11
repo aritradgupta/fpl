@@ -12,11 +12,14 @@ from fpl.optimizer.expected_points import (
     player_stats_from_series,
     project_player_xp,
 )
+from fpl.optimizer.genetic import optimize_genetic_squad
+from fpl.optimizer.multi_period import optimize_multi_period_squad
+from fpl.optimizer.single_period import optimize_single_period_squad, optimize_starting_xi_and_bench
 from fpl.optimizer.solver import (
     optimize_squad,
-    optimize_starting_xi_and_bench,
     optimize_transfers,
 )
+from fpl.optimizer.stochastic import optimize_stochastic_squad
 
 optimize_starting_xi = optimize_starting_xi_and_bench
 
@@ -32,6 +35,10 @@ __all__ = [
     "calculate_player_xp",
     "enrich_df_with_xp",
     "optimize_squad",
+    "optimize_single_period_squad",
+    "optimize_multi_period_squad",
+    "optimize_stochastic_squad",
+    "optimize_genetic_squad",
     "optimize_starting_xi_and_bench",
     "optimize_starting_xi",
     "optimize_transfers",
