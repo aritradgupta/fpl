@@ -26,6 +26,8 @@ def optimize_stochastic_squad(
     risk_aversion: float = 0.15,
     num_scenarios: int = 1000,
     use_gpu: bool = True,
+    lock_players: list[str] | None = None,
+    exclude_players: list[str] | None = None,
 ) -> SquadRecommendation:
     """
     Select an optimal squad maximizing risk-adjusted utility (Mean_xP - risk_aversion * Variance).
@@ -77,6 +79,19 @@ def optimize_stochastic_squad(
             pulp.lpSum([player_vars[i] for i in df.index if df.loc[i, "team"] == team_name]) <= club_limit,
             f"Club_Limit_{team_name}",
         )
+
+    # Lock / Exclude player constraints
+    if lock_players:
+        for p_name in lock_players:
+            match_idx = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
+            for i in match_idx:
+                prob += player_vars[i] == 1, f"Lock_Player_{i}"
+
+    if exclude_players:
+        for p_name in exclude_players:
+            match_idx = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
+            for i in match_idx:
+                prob += player_vars[i] == 0, f"Exclude_Player_{i}"
 
     prob.solve(pulp.PULP_CBC_CMD(msg=False))
     require_optimal(prob, "Stochastic squad optimization")

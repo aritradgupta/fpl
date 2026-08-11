@@ -60,6 +60,8 @@ def optimize_single_period_squad(
     budget: float = TOTAL_BUDGET,
     club_limit: int = MAX_PER_TEAM,
     chip: ChipType = ChipType.NONE,
+    lock_players: list[str] | None = None,
+    exclude_players: list[str] | None = None,
 ) -> SquadRecommendation:
     """
     Select an optimal 15-player FPL squad maximizing single-GW expected points.
@@ -95,6 +97,19 @@ def optimize_single_period_squad(
             pulp.lpSum([player_vars[i] for i in df.index if df.loc[i, "team"] == team_name]) <= club_limit,
             f"Club_Limit_{team_name}",
         )
+
+    # Lock / Exclude player constraints
+    if lock_players:
+        for p_name in lock_players:
+            match_idx = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
+            for i in match_idx:
+                prob += player_vars[i] == 1, f"Lock_Player_{i}"
+
+    if exclude_players:
+        for p_name in exclude_players:
+            match_idx = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
+            for i in match_idx:
+                prob += player_vars[i] == 0, f"Exclude_Player_{i}"
 
     prob.solve(pulp.PULP_CBC_CMD(msg=False))
     require_optimal(prob, "Squad optimization")

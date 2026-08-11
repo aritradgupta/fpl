@@ -37,11 +37,13 @@ async def generate_recommendation(
     population_size: int = 60,
     risk_aversion: float = 0.15,
     horizon_weeks: int = 3,
+    lock_players: list[str] | None = None,
+    exclude_players: list[str] | None = None,
 ):
     console.print(
         Panel(
             f"[bold green]FPL 2026-27 Team Creator — Solver Model: [{solver_type.upper()}][/bold green]\n"
-            f"Config: seed={seed}, gen={generations}, pop={population_size}, risk={risk_aversion}, horizon={horizon_weeks}w\n"
+            f"Config: seed={seed}, gen={generations}, pop={population_size}, risk={risk_aversion}, horizon={horizon_weeks}w, locked={lock_players}\n"
             "Fetching live player prices & projections from Fantasy Premier League API...",
             border_style="green",
         )
@@ -70,6 +72,8 @@ async def generate_recommendation(
         population_size=population_size,
         risk_aversion=risk_aversion,
         horizon_weeks=horizon_weeks,
+        lock_players=lock_players,
+        exclude_players=exclude_players,
     )
 
     # 4. Print 15-Man Squad Summary Table
@@ -140,6 +144,10 @@ def main():
         "--risk-aversion", type=float, default=0.15, help="Risk aversion parameter for stochastic solver"
     )
     parser.add_argument("--horizon", type=int, default=3, help="Horizon weeks count for multi-period solver")
+    parser.add_argument(
+        "--lock", type=str, nargs="*", help="Lock specific player name(s) into squad (e.g. --lock Haaland)"
+    )
+    parser.add_argument("--exclude", type=str, nargs="*", help="Exclude specific player name(s) from squad")
 
     args = parser.parse_args()
     asyncio.run(
@@ -150,6 +158,8 @@ def main():
             population_size=args.population,
             risk_aversion=args.risk_aversion,
             horizon_weeks=args.horizon,
+            lock_players=args.lock,
+            exclude_players=args.exclude,
         )
     )
 

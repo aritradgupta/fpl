@@ -29,29 +29,55 @@ def _repair_squad_chromosome(
     budget: float,
     club_limit: int,
     rng: np.random.Generator,
+    lock_players: list[str] | None = None,
+    exclude_players: list[str] | None = None,
 ) -> list[int]:
     """
-    Repair chromosome to satisfy exact 15-man position limits, budget, and club constraints.
+    Repair chromosome to satisfy exact 15-man position limits, budget, and club constraints,
+    while enforcing locked and excluded players.
     """
     selected = {int(i) for i in indices}
+
+    locked_indices: set[int] = set()
+    if lock_players:
+        for p_name in lock_players:
+            match = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
+            locked_indices.update(set(match))
+
+    excluded_indices: set[int] = set()
+    if exclude_players:
+        for p_name in exclude_players:
+            match = df[df["web_name"].str.contains(p_name, case=False, na=False)].index
+            excluded_indices.update(set(match))
+
+    # Remove excluded players and add locked players
+    selected -= excluded_indices
+    selected.update(locked_indices)
 
     # 1. Enforce exact positional counts
     for pos, required_cnt in POSITION_LIMITS.items():
         pos_in_squad = [i for i in selected if df.loc[i, "position"] == pos]
-        while len(pos_in_squad) > required_cnt:
-            drop_i = int(rng.choice(pos_in_squad))
+        droppable = [i for i in pos_in_squad if i not in locked_indices]
+
+        while len(pos_in_squad) > required_cnt and droppable:
+            drop_i = int(rng.choice(droppable))
             selected.remove(drop_i)
             pos_in_squad.remove(drop_i)
+            droppable.remove(drop_i)
 
         while len(pos_in_squad) < required_cnt:
-            available = [int(i) for i in df.index if i not in selected and df.loc[i, "position"] == pos]
+            available = [
+                int(i)
+                for i in df.index
+                if i not in selected and i not in excluded_indices and df.loc[i, "position"] == pos
+            ]
             if not available:
                 break
             add_i = int(rng.choice(available))
             selected.add(add_i)
             pos_in_squad.append(add_i)
 
-    # 2. Repair cost and club limits by swapping expensive/over-limit players for cheap/valid ones
+    # 2. Repair cost and club limits
     max_attempts = 50
     for _ in range(max_attempts):
         cost_sum = float(df.loc[list(selected), "cost"].sum())
@@ -63,11 +89,14 @@ def _repair_squad_chromosome(
         if cost_sum <= budget and not over_teams and len(selected) == SQUAD_SIZE:
             break
 
-        drop_candidates = list(selected)
+        drop_candidates = [i for i in selected if i not in locked_indices]
         if over_teams:
-            over_cand = [i for i in selected if str(df.loc[i, "team"]) in over_teams]
+            over_cand = [i for i in drop_candidates if str(df.loc[i, "team"]) in over_teams]
             if over_cand:
                 drop_candidates = over_cand
+
+        if not drop_candidates:
+            break
 
         drop_i = int(rng.choice(drop_candidates))
         drop_pos = str(df.loc[drop_i, "position"])
@@ -77,6 +106,7 @@ def _repair_squad_chromosome(
             int(i)
             for i in df.index
             if i not in selected
+            and i not in excluded_indices
             and str(df.loc[i, "position"]) == drop_pos
             and float(str(df.loc[i, "cost"])) <= drop_cost
             and team_counts.get(str(df.loc[i, "team"]), 0) < club_limit
@@ -231,6 +261,8 @@ def optimize_genetic_squad(
     initial_mutation_rate: float = 0.30,
     seed: int | None = 42,
     use_gpu: bool = True,
+    lock_players: list[str] | None = None,
+    exclude_players: list[str] | None = None,
 ) -> SquadRecommendation:
     """
     Select an optimal squad using a State-of-the-Art Hybrid Memetic Genetic Algorithm (GPU Vectorized).
@@ -246,9 +278,12 @@ def optimize_genetic_squad(
 
     # 1. Seed initial population (25% domain smart seeds + 75% random)
     population = _seed_smart_population(df, population_size, budget, club_limit, rng)
+    population = [
+        _repair_squad_chromosome(c, df, budget, club_limit, rng, lock_players, exclude_players) for c in population
+    ]
     while len(population) < population_size:
         raw_indices = rng.choice(indices, size=SQUAD_SIZE, replace=False).tolist()
-        repaired = _repair_squad_chromosome(raw_indices, df, budget, club_limit, rng)
+        repaired = _repair_squad_chromosome(raw_indices, df, budget, club_limit, rng, lock_players, exclude_players)
         population.append(repaired)
 
     best_fitness_history: list[float] = []
@@ -294,7 +329,9 @@ def optimize_genetic_squad(
         if stagnation_counter >= 10:
             for i in range(elitism_count, population_size):
                 raw_scramble = rng.choice(indices, size=SQUAD_SIZE, replace=False).tolist()
-                population[i] = _repair_squad_chromosome(raw_scramble, df, budget, club_limit, rng)
+                population[i] = _repair_squad_chromosome(
+                    raw_scramble, df, budget, club_limit, rng, lock_players, exclude_players
+                )
             stagnation_counter = 0
 
         # Construct next generation
@@ -326,8 +363,8 @@ def optimize_genetic_squad(
                 c2_raw.remove(drop_i)
                 c2_raw.append(int(rng.choice(indices)))
 
-            c1 = _repair_squad_chromosome(c1_raw, df, budget, club_limit, rng)
-            c2 = _repair_squad_chromosome(c2_raw, df, budget, club_limit, rng)
+            c1 = _repair_squad_chromosome(c1_raw, df, budget, club_limit, rng, lock_players, exclude_players)
+            c2 = _repair_squad_chromosome(c2_raw, df, budget, club_limit, rng, lock_players, exclude_players)
 
             new_pop.append(c1)
             if len(new_pop) < population_size:
