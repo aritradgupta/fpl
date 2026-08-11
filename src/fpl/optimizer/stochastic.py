@@ -13,6 +13,7 @@ import pulp  # type: ignore[import-untyped]
 from fpl.models.player import PlayerStats
 from fpl.models.squad import ChipType, SquadRecommendation
 from fpl.optimizer.expected_points import enrich_df_with_xp
+from fpl.optimizer.gpu import simulate_scenarios_gpu
 from fpl.optimizer.single_period import optimize_starting_xi_and_bench, prepare_players, require_optimal
 from fpl.rules.constraints import MAX_PER_TEAM, POSITION_LIMITS, SQUAD_SIZE, TOTAL_BUDGET
 
@@ -23,12 +24,13 @@ def optimize_stochastic_squad(
     club_limit: int = MAX_PER_TEAM,
     chip: ChipType = ChipType.NONE,
     risk_aversion: float = 0.15,
-    num_scenarios: int = 100,
+    num_scenarios: int = 1000,
+    use_gpu: bool = True,
 ) -> SquadRecommendation:
     """
     Select an optimal squad maximizing risk-adjusted utility (Mean_xP - risk_aversion * Variance).
 
-    Simulates 100 Monte Carlo match scenarios incorporating expected minutes uncertainty.
+    Simulates Monte Carlo match scenarios (accelerated on NVIDIA CUDA GPU if available).
     """
     if risk_aversion < 0.0 or risk_aversion > 2.0:
         raise ValueError("risk_aversion must be between 0.0 and 2.0.")
@@ -36,27 +38,17 @@ def optimize_stochastic_squad(
     df = prepare_players(players)
     df = enrich_df_with_xp(df)
 
-    rng = np.random.default_rng(seed=42)
+    base_xp = df["target_xp"].fillna(df["calculated_xp"]).to_numpy(dtype=float)
+    exp_mins = df["expected_minutes"].fillna(60.0).to_numpy(dtype=float)
 
-    # Generate Monte Carlo scenario matrix
-    utility_scores: list[float] = []
-    for _, row in df.iterrows():
-        base_xp = float(row.get("target_xp", row.get("calculated_xp", 0.0)))
-        exp_mins = float(row.get("expected_minutes", 60.0))
+    mean_xp, var_xp = simulate_scenarios_gpu(
+        base_xp=base_xp,
+        expected_mins=exp_mins,
+        num_scenarios=num_scenarios,
+        use_gpu=use_gpu,
+    )
 
-        # Model minutes noise & performance variance
-        mins_sim = rng.normal(loc=exp_mins, scale=15.0, size=num_scenarios)
-        mins_sim = np.clip(mins_sim, 0.0, 90.0)
-
-        perf_noise = rng.gamma(shape=2.0, scale=0.5, size=num_scenarios)
-        scenarios = (mins_sim / 90.0) * base_xp * perf_noise
-
-        mean_xp = float(np.mean(scenarios))
-        var_xp = float(np.var(scenarios))
-
-        risk_adjusted = mean_xp - (risk_aversion * var_xp)
-        utility_scores.append(max(0.0, risk_adjusted))
-
+    utility_scores = np.maximum(0.0, mean_xp - (risk_aversion * var_xp))
     df["stochastic_utility"] = utility_scores
 
     prob = pulp.LpProblem("FPL_Stochastic_Squad_Optimizer", pulp.LpMaximize)
