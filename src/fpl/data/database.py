@@ -56,6 +56,14 @@ async def init_db(db_path: Path = DB_PATH) -> None:
         columns = {row[1] for row in await db.execute_fetchall("PRAGMA table_info(players)")}
         if "team_id" not in columns:
             await db.execute("ALTER TABLE players ADD COLUMN team_id INTEGER DEFAULT 0")
+        await db.execute(
+            """
+            UPDATE players
+            SET team_id = (SELECT id FROM teams WHERE teams.name = players.team)
+            WHERE COALESCE(team_id, 0) = 0
+              AND EXISTS (SELECT 1 FROM teams WHERE teams.name = players.team)
+            """
+        )
         await db.execute("""
             CREATE TABLE IF NOT EXISTS sync_meta (
                 key TEXT PRIMARY KEY,

@@ -41,6 +41,8 @@ class SquadRecommendRequest(BaseModel):
     club_limit: int = Field(default=3, ge=1, le=5, description="Max players allowed per PL club")
     chip: ChipType = Field(default=ChipType.NONE, description="Active chip (none, wildcard, freehit, bboost, 3xc)")
     solver_type: SolverType = Field(default=SolverType.SINGLE_PERIOD, description="Solver model strategy")
+    gameweek: int = Field(default=1, ge=1, le=50, description="First gameweek to project")
+    horizon_weeks: int = Field(default=3, ge=1, le=10, description="Projection horizon for multi-period solver")
 
 
 class SquadRecommendResponse(BaseModel):

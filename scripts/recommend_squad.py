@@ -14,6 +14,8 @@ import argparse
 import asyncio
 import sys
 
+import pandas as pd
+
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
     sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[union-attr]
@@ -39,6 +41,7 @@ async def generate_recommendation(
     horizon_weeks: int = 3,
     lock_players: list[str] | None = None,
     exclude_players: list[str] | None = None,
+    gameweek: int = 1,
 ):
     console.print(
         Panel(
@@ -62,6 +65,14 @@ async def generate_recommendation(
     # 2. Load players
     players_df = await load_players_df_from_db()
 
+    try:
+        fixtures_df = pd.DataFrame(await client.get_fixtures())
+        if fixtures_df.empty:
+            fixtures_df = None
+    except Exception as exc:
+        fixtures_df = None
+        console.print(f"  [yellow]⚠ Unable to fetch fixtures ({exc}); using neutral fixture fallback.[/yellow]\n")
+
     # 3. Run selected solver strategy
     squad_rec = optimize_squad(
         players_df,
@@ -74,6 +85,8 @@ async def generate_recommendation(
         horizon_weeks=horizon_weeks,
         lock_players=lock_players,
         exclude_players=exclude_players,
+        fixtures_df=fixtures_df,
+        gameweek=gameweek,
     )
 
     # 4. Print 15-Man Squad Summary Table
@@ -144,6 +157,7 @@ def main():
         "--risk-aversion", type=float, default=0.15, help="Risk aversion parameter for stochastic solver"
     )
     parser.add_argument("--horizon", type=int, default=3, help="Horizon weeks count for multi-period solver")
+    parser.add_argument("--gameweek", type=int, default=1, help="First gameweek to project")
     parser.add_argument(
         "--lock", type=str, nargs="*", help="Lock specific player name(s) into squad (e.g. --lock Haaland)"
     )
@@ -160,6 +174,7 @@ def main():
             horizon_weeks=args.horizon,
             lock_players=args.lock,
             exclude_players=args.exclude,
+            gameweek=args.gameweek,
         )
     )
 

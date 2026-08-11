@@ -2,11 +2,12 @@
 Unit tests for Multi-Version Solver Suite (Single, Multi-Period, Stochastic, Genetic).
 """
 
+import pandas as pd
 import pytest
 
 from fpl.models.player import PlayerStats, Position
 from fpl.models.squad import ChipType, SolverType
-from fpl.optimizer import optimize_multi_period_plan, optimize_squad
+from fpl.optimizer import optimize_multi_period_plan, optimize_squad, optimize_stochastic_squad
 
 
 @pytest.fixture
@@ -142,3 +143,47 @@ def test_transfer_aware_horizon_supports_bench_boost(mock_player_pool: list[Play
 
     assert plan.gameweeks[0].chip == ChipType.NONE
     assert plan.gameweeks[1].chip == ChipType.BENCH_BOOST
+
+
+def test_dispatcher_passes_fixture_context(mock_player_pool: list[PlayerStats]) -> None:
+    players = pd.DataFrame([player.model_dump() for player in mock_player_pool])
+    team_ids = {team: index + 1 for index, team in enumerate(players["team"].unique())}
+    players["team_id"] = players["team"].map(team_ids)
+    fixtures = pd.DataFrame(
+        [
+            {
+                "event": 1,
+                "team_h": team_id,
+                "team_a": 99,
+                "team_h_difficulty": 1,
+                "team_a_difficulty": 5,
+            }
+            for team_id in team_ids.values()
+        ]
+    )
+
+    recommendation = optimize_squad(players, solver_type=SolverType.SINGLE_PERIOD, fixtures_df=fixtures, gameweek=1)
+
+    assert recommendation.squad_size == 15
+
+
+def test_stochastic_solver_preserves_projection_columns_with_fixtures(mock_player_pool: list[PlayerStats]) -> None:
+    players = pd.DataFrame([player.model_dump() for player in mock_player_pool])
+    team_ids = {team: index + 1 for index, team in enumerate(players["team"].unique())}
+    players["team_id"] = players["team"].map(team_ids)
+    fixtures = pd.DataFrame(
+        [
+            {"event": 1, "team_h": team_id, "team_a": 99, "team_h_difficulty": 2, "team_a_difficulty": 4}
+            for team_id in team_ids.values()
+        ]
+    )
+
+    recommendation = optimize_stochastic_squad(
+        players,
+        fixtures_df=fixtures,
+        gameweek=1,
+        num_scenarios=10,
+        use_gpu=False,
+    )
+
+    assert recommendation.squad_size == 15

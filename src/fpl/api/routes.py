@@ -2,6 +2,9 @@
 FastAPI Routes for FPL Team Creator Application.
 """
 
+from contextlib import suppress
+
+import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, status
 
 from fpl.api.schemas import (
@@ -70,7 +73,14 @@ async def list_players(
     return df.to_dict("records")
 
 
-async def _process_squad_recommendation(budget: float, club_limit: int, chip: ChipType, solver_type: SolverType):
+async def _process_squad_recommendation(
+    budget: float,
+    club_limit: int,
+    chip: ChipType,
+    solver_type: SolverType,
+    gameweek: int = 1,
+    horizon_weeks: int = 3,
+):
     """Shared handler for squad optimization."""
     df = await load_players_df_from_db()
     if df.empty:
@@ -78,8 +88,23 @@ async def _process_squad_recommendation(budget: float, club_limit: int, chip: Ch
         await sync_bootstrap_to_db(data)
         df = await load_players_df_from_db()
 
+    fixtures_df = None
+    with suppress(Exception):
+        fixtures_df = pd.DataFrame(await client.get_fixtures())
+        if fixtures_df.empty:
+            fixtures_df = None
+
     try:
-        rec = optimize_squad(df, budget=budget, club_limit=club_limit, chip=chip, solver_type=solver_type)
+        rec = optimize_squad(
+            df,
+            budget=budget,
+            club_limit=club_limit,
+            chip=chip,
+            solver_type=solver_type,
+            horizon_weeks=horizon_weeks,
+            gameweek=gameweek,
+            fixtures_df=fixtures_df,
+        )
         return rec.model_dump()
     except Exception as e:
         raise HTTPException(
@@ -99,11 +124,20 @@ async def recommend_squad_get(
     club_limit: int = Query(3, ge=1, le=5, description="Max players allowed per PL club"),
     chip: ChipType = Query(ChipType.NONE, description="Active chip (none, wildcard, freehit, bboost, 3xc)"),
     solver_type: SolverType = Query(SolverType.SINGLE_PERIOD, description="Solver strategy model"),
+    gameweek: int = Query(1, ge=1, le=50, description="First gameweek to project"),
+    horizon_weeks: int = Query(3, ge=1, le=10, description="Projection horizon"),
 ):
     """
     Recommend 15-man squad via GET request using URL query parameters.
     """
-    return await _process_squad_recommendation(budget=budget, club_limit=club_limit, chip=chip, solver_type=solver_type)
+    return await _process_squad_recommendation(
+        budget=budget,
+        club_limit=club_limit,
+        chip=chip,
+        solver_type=solver_type,
+        gameweek=gameweek,
+        horizon_weeks=horizon_weeks,
+    )
 
 
 @router.post(
@@ -117,7 +151,12 @@ async def recommend_squad_post(req: SquadRecommendRequest):
     Recommend 15-man squad via POST request using JSON body payload.
     """
     return await _process_squad_recommendation(
-        budget=req.budget, club_limit=req.club_limit, chip=req.chip, solver_type=req.solver_type
+        budget=req.budget,
+        club_limit=req.club_limit,
+        chip=req.chip,
+        solver_type=req.solver_type,
+        gameweek=req.gameweek,
+        horizon_weeks=req.horizon_weeks,
     )
 
 

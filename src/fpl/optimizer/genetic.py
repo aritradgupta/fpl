@@ -17,7 +17,7 @@ import pandas as pd
 
 from fpl.models.player import PlayerStats
 from fpl.models.squad import ChipType, SquadRecommendation
-from fpl.optimizer.expected_points import enrich_df_with_xp
+from fpl.optimizer.expected_points import enrich_df_with_fixture_xp, enrich_df_with_xp
 from fpl.optimizer.gpu import evaluate_population_gpu
 from fpl.optimizer.single_period import optimize_starting_xi_and_bench, prepare_players, resolve_player_indices
 from fpl.rules.constraints import MAX_PER_TEAM, POSITION_LIMITS, SQUAD_SIZE, TOTAL_BUDGET
@@ -257,12 +257,17 @@ def optimize_genetic_squad(
     use_gpu: bool = True,
     lock_players: list[str | int] | None = None,
     exclude_players: list[str | int] | None = None,
+    fixtures_df: pd.DataFrame | None = None,
+    gameweek: int = 1,
 ) -> SquadRecommendation:
     """
     Select an optimal squad using a State-of-the-Art Hybrid Memetic Genetic Algorithm (GPU Vectorized).
     """
     df = prepare_players(players)
     df = enrich_df_with_xp(df)
+    if fixtures_df is not None:
+        df = enrich_df_with_fixture_xp(df, fixtures_df, [gameweek])
+        df["target_xp"] = df[f"xp_gw_{gameweek}"]
 
     rng = np.random.default_rng(seed=seed)
     indices = list(df.index)

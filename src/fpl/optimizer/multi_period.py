@@ -31,6 +31,7 @@ def optimize_multi_period_squad(
     lock_players: list[str | int] | None = None,
     exclude_players: list[str | int] | None = None,
     fixtures_df: pd.DataFrame | None = None,
+    start_gameweek: int = 1,
 ) -> SquadRecommendation:
     """
     Select a squad optimizing cumulative expected points across a multi-gameweek horizon.
@@ -46,12 +47,15 @@ def optimize_multi_period_squad(
     df = enrich_df_with_xp(df)
 
     if fixtures_df is not None:
-        df = enrich_df_with_fixture_xp(df, fixtures_df, range(1, horizon_weeks + 1))
+        df = enrich_df_with_fixture_xp(df, fixtures_df, range(start_gameweek, start_gameweek + horizon_weeks))
 
     # Compute multi-week discounted target xP
     multi_xp: list[float] = []
     for _, row in df.iterrows():
-        weekly_xp = [float(row.get(f"xp_gw_{gw}", row.get("target_xp", 0.0))) for gw in range(1, horizon_weeks + 1)]
+        weekly_xp = [
+            float(row.get(f"xp_gw_{gw}", row.get("target_xp", 0.0)))
+            for gw in range(start_gameweek, start_gameweek + horizon_weeks)
+        ]
         discounted_sum = sum(xp * (decay_factor**w) for w, xp in enumerate(weekly_xp))
         multi_xp.append(discounted_sum)
 

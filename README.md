@@ -105,7 +105,7 @@ uv run python scripts/recommend_squad.py --solver single_period
 uv run python scripts/recommend_squad.py --lock Haaland
 
 # Multi-Period Horizon solver (5-week block)
-uv run python scripts/recommend_squad.py --solver multi_period --horizon 5
+uv run python scripts/recommend_squad.py --solver multi_period --gameweek 1 --horizon 5
 
 # Stochastic Risk-Adjusted Scenario solver (CUDA GPU accelerated)
 uv run python scripts/recommend_squad.py --solver stochastic --risk-aversion 0.25
@@ -126,6 +126,9 @@ uv run python scripts/recommend_squad.py --solver genetic --seed 42 --generation
 | `--population` | `int` | `60` | $\ge 10$ | Chromosome population size (`genetic` solver) |
 | `--risk-aversion` | `float` | `0.15` | $0.0 - 2.0$ | Risk aversion parameter $\lambda$ (`stochastic` solver) |
 | `--horizon` | `int` | `3` | $1 - 10$ | Number of upcoming gameweeks in multi-period block (`multi_period` solver) |
+| `--gameweek` | `int` | `1` | $1 - 50$ | First gameweek used for fixture difficulty and home/away context |
+
+The CLI and squad recommendation API fetch official fixtures and pass them to every solver. If fixtures cannot be reached, the system falls back to the neutral projection model so cached/offline analysis remains usable.
 
 ### 2. Start FastAPI Web Server
 

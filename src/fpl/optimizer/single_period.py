@@ -10,6 +10,7 @@ import pulp  # type: ignore[import-untyped]
 from fpl.models.player import PlayerStats
 from fpl.models.squad import ChipType, SelectedPlayer, SquadRecommendation, SquadRole
 from fpl.optimizer.expected_points import (
+    enrich_df_with_fixture_xp,
     enrich_df_with_xp,
     player_stats_from_series,
     project_player_xp,
@@ -77,6 +78,8 @@ def optimize_single_period_squad(
     chip: ChipType = ChipType.NONE,
     lock_players: list[str | int] | None = None,
     exclude_players: list[str | int] | None = None,
+    fixtures_df: pd.DataFrame | None = None,
+    gameweek: int = 1,
 ) -> SquadRecommendation:
     """
     Select an optimal 15-player FPL squad maximizing single-GW expected points.
@@ -85,6 +88,9 @@ def optimize_single_period_squad(
         raise ValueError("Budget must be non-negative and club_limit must be at least 1.")
     df = prepare_players(players)
     df = enrich_df_with_xp(df)
+    if fixtures_df is not None:
+        df = enrich_df_with_fixture_xp(df, fixtures_df, [gameweek])
+        df["target_xp"] = df[f"xp_gw_{gameweek}"]
 
     prob = pulp.LpProblem("FPL_Squad_Optimizer", pulp.LpMaximize)
     player_vars = binary_variables(prob, "squad", df.index)
@@ -139,7 +145,8 @@ def optimize_starting_xi_and_bench(
     if len(df) != SQUAD_SIZE:
         raise ValueError(f"Squad must contain exactly {SQUAD_SIZE} players (got {len(df)}).")
 
-    df = enrich_df_with_xp(df)
+    if "target_xp" not in df.columns:
+        df = enrich_df_with_xp(df)
 
     prob = pulp.LpProblem("FPL_Lineup_Optimizer", pulp.LpMaximize)
     indices = range(len(df))

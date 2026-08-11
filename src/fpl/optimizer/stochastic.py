@@ -12,7 +12,7 @@ import pulp  # type: ignore[import-untyped]
 
 from fpl.models.player import PlayerStats
 from fpl.models.squad import ChipType, SquadRecommendation
-from fpl.optimizer.expected_points import enrich_df_with_xp
+from fpl.optimizer.expected_points import enrich_df_with_fixture_xp, enrich_df_with_xp
 from fpl.optimizer.gpu import simulate_scenarios_gpu
 from fpl.optimizer.pulp_compat import binary_variables, cbc_solver
 from fpl.optimizer.single_period import (
@@ -34,6 +34,8 @@ def optimize_stochastic_squad(
     use_gpu: bool = True,
     lock_players: list[str | int] | None = None,
     exclude_players: list[str | int] | None = None,
+    fixtures_df: pd.DataFrame | None = None,
+    gameweek: int = 1,
 ) -> SquadRecommendation:
     """
     Select an optimal squad maximizing risk-adjusted utility (Mean_xP - risk_aversion * Variance).
@@ -45,6 +47,9 @@ def optimize_stochastic_squad(
 
     df = prepare_players(players)
     df = enrich_df_with_xp(df)
+    if fixtures_df is not None:
+        df = enrich_df_with_fixture_xp(df, fixtures_df, [gameweek])
+        df["target_xp"] = df[f"xp_gw_{gameweek}"]
 
     base_xp = df["target_xp"].fillna(df["calculated_xp"]).to_numpy(dtype=float)
     exp_mins = df["expected_minutes"].fillna(60.0).to_numpy(dtype=float)
