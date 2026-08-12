@@ -7,7 +7,12 @@ import pytest
 
 from fpl.models.player import PlayerStats, Position
 from fpl.models.squad import ChipType, SolverType
-from fpl.optimizer import optimize_multi_period_plan, optimize_squad, optimize_stochastic_squad
+from fpl.optimizer import (
+    ModelBackedProjectionAdapter,
+    optimize_multi_period_plan,
+    optimize_squad,
+    optimize_stochastic_squad,
+)
 
 
 @pytest.fixture
@@ -165,6 +170,24 @@ def test_dispatcher_passes_fixture_context(mock_player_pool: list[PlayerStats]) 
     recommendation = optimize_squad(players, solver_type=SolverType.SINGLE_PERIOD, fixtures_df=fixtures, gameweek=1)
 
     assert recommendation.squad_size == 15
+
+
+def test_single_period_solver_accepts_opt_in_projection_adapter(mock_player_pool: list[PlayerStats]) -> None:
+    class FixedModel:
+        def predict(self, rows: pd.DataFrame) -> pd.DataFrame:
+            return pd.DataFrame(
+                {"expected_minutes": [90.0] * len(rows), "expected_points": [7.0] * len(rows)},
+                index=rows.index,
+            )
+
+    recommendation = optimize_squad(
+        mock_player_pool,
+        budget=100.0,
+        projection_adapter=ModelBackedProjectionAdapter(FixedModel(), learned_weight=0.5),
+    )
+
+    assert recommendation.squad_size == 15
+    assert all(player.projection.expected_minutes == 90.0 for player in recommendation.starting_xi)
 
 
 def test_stochastic_solver_preserves_projection_columns_with_fixtures(mock_player_pool: list[PlayerStats]) -> None:

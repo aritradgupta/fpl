@@ -15,6 +15,7 @@ from fpl.optimizer.expected_points import (
     player_stats_from_series,
     project_player_xp,
 )
+from fpl.optimizer.model_adapter import ModelBackedProjectionAdapter
 from fpl.optimizer.pulp_compat import binary_variables, cbc_solver
 from fpl.rules.constraints import (
     MAX_PER_TEAM,
@@ -80,6 +81,8 @@ def optimize_single_period_squad(
     exclude_players: list[str | int] | None = None,
     fixtures_df: pd.DataFrame | None = None,
     gameweek: int = 1,
+    projection_adapter: ModelBackedProjectionAdapter | None = None,
+    projection_column: str | None = None,
 ) -> SquadRecommendation:
     """
     Select an optimal 15-player FPL squad maximizing single-GW expected points.
@@ -88,9 +91,21 @@ def optimize_single_period_squad(
         raise ValueError("Budget must be non-negative and club_limit must be at least 1.")
     df = prepare_players(players)
     df = enrich_df_with_xp(df)
+    if projection_column is not None:
+        if projection_column not in df.columns:
+            raise ValueError(f"Projection column {projection_column!r} is not present in player data.")
+        df["target_xp"] = pd.to_numeric(df[projection_column], errors="coerce").fillna(0.0).clip(lower=0.0)
     if fixtures_df is not None:
         df = enrich_df_with_fixture_xp(df, fixtures_df, [gameweek])
         df["target_xp"] = df[f"xp_gw_{gameweek}"]
+    if projection_adapter is not None:
+        df["target_xp"] = [
+            projection_adapter.project(
+                player_stats_from_series(row),
+                feature_row=row,
+            ).total_xp
+            for _, row in df.iterrows()
+        ]
 
     prob = pulp.LpProblem("FPL_Squad_Optimizer", pulp.LpMaximize)
     player_vars = binary_variables(prob, "squad", df.index)
@@ -131,12 +146,13 @@ def optimize_single_period_squad(
     selected_indices = [i for i in df.index if player_vars[i].varValue is not None and player_vars[i].varValue > 0.5]
     selected_df = df.loc[selected_indices].copy()
 
-    return optimize_starting_xi_and_bench(selected_df, chip=chip)
+    return optimize_starting_xi_and_bench(selected_df, chip=chip, projection_adapter=projection_adapter)
 
 
 def optimize_starting_xi_and_bench(
     squad_df: pd.DataFrame,
     chip: ChipType = ChipType.NONE,
+    projection_adapter: ModelBackedProjectionAdapter | None = None,
 ) -> SquadRecommendation:
     """
     Select 11 starters, 4 bench players, Captain, and Vice-Captain from 15 players.
@@ -202,7 +218,11 @@ def optimize_starting_xi_and_bench(
 
     starting_xi: list[SelectedPlayer] = []
     for _, row in starters_df.iterrows():
-        proj = project_player_xp(player_stats_from_series(row))
+        proj = (
+            projection_adapter.project(player_stats_from_series(row), feature_row=row)
+            if projection_adapter is not None
+            else project_player_xp(player_stats_from_series(row))
+        )
         if row.name == cap_idx:
             role = SquadRole.CAPTAIN
         elif row.name == vice_idx:
@@ -213,13 +233,25 @@ def optimize_starting_xi_and_bench(
 
     bench_players: list[SelectedPlayer] = []
     for bench_order, (_, row) in enumerate(ordered_bench_df.iterrows(), start=1):
-        proj = project_player_xp(player_stats_from_series(row))
+        proj = (
+            projection_adapter.project(player_stats_from_series(row), feature_row=row)
+            if projection_adapter is not None
+            else project_player_xp(player_stats_from_series(row))
+        )
         bench_players.append(SelectedPlayer(projection=proj, role=SquadRole.BENCH, bench_order=bench_order))
 
     cap_row = df.iloc[cap_idx]
     vice_row = df.iloc[vice_idx]
-    cap_proj = project_player_xp(player_stats_from_series(cap_row))
-    vice_proj = project_player_xp(player_stats_from_series(vice_row))
+    cap_proj = (
+        projection_adapter.project(player_stats_from_series(cap_row), feature_row=cap_row)
+        if projection_adapter is not None
+        else project_player_xp(player_stats_from_series(cap_row))
+    )
+    vice_proj = (
+        projection_adapter.project(player_stats_from_series(vice_row), feature_row=vice_row)
+        if projection_adapter is not None
+        else project_player_xp(player_stats_from_series(vice_row))
+    )
 
     if is_bench_boost:
         total_xp = sum(p.projection.total_xp for p in starting_xi) + sum(p.projection.total_xp for p in bench_players)

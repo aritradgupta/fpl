@@ -24,6 +24,7 @@ from fpl.optimizer.expected_points import (
     project_player_xp,
 )
 from fpl.optimizer.genetic import optimize_genetic_squad
+from fpl.optimizer.model_adapter import ModelBackedProjectionAdapter
 from fpl.optimizer.multi_period import optimize_multi_period_squad
 from fpl.optimizer.single_period import (
     optimize_single_period_squad,
@@ -52,6 +53,8 @@ def optimize_squad(
     gameweek: int = 1,
     num_scenarios: int = 1000,
     use_gpu: bool = True,
+    projection_adapter: ModelBackedProjectionAdapter | None = None,
+    projection_column: str | None = None,
 ) -> SquadRecommendation:
     """
     Select an optimal 15-player FPL squad using the specified solver strategy.
@@ -112,6 +115,8 @@ def optimize_squad(
         exclude_players=exclude_players,
         fixtures_df=fixtures_df,
         gameweek=gameweek,
+        projection_adapter=projection_adapter,
+        projection_column=projection_column,
     )
 
 
