@@ -45,6 +45,7 @@ class ModelBackedProjectionAdapter:
 
         try:
             row = feature_row.to_frame().T if isinstance(feature_row, pd.Series) else pd.DataFrame([feature_row])
+            row = _complete_runtime_features(row, self.model)
             prediction = self.model.predict(row).iloc[0]
             learned_minutes = _bounded_number(prediction["expected_minutes"], 0.0, 90.0)
             learned_points = max(0.0, _bounded_number(prediction["expected_points"], 0.0, float("inf")))
@@ -68,3 +69,37 @@ def _bounded_number(value: object, lower: float, upper: float) -> float:
     if not pd.notna(number):
         raise ValueError("Prediction is not finite.")
     return min(upper, max(lower, number))
+
+
+def _complete_runtime_features(rows: pd.DataFrame, model: PredictionModel) -> pd.DataFrame:
+    """Add model-schema columns from current cumulative player statistics."""
+    feature_columns = getattr(model, "feature_columns", [])
+    if not feature_columns:
+        return rows
+    completed = rows.copy()
+    source_aliases = {
+        "minutes": ("minutes",),
+        "total_points": ("total_points", "total_points_lag1"),
+        "goals_scored": ("goals_scored",),
+        "assists": ("assists",),
+        "bonus": ("bonus",),
+        "bps": ("bps",),
+        "ict_index": ("ict_index",),
+        "influence": ("influence",),
+        "creativity": ("creativity",),
+        "threat": ("threat",),
+        "saves": ("saves",),
+        "clean_sheets": ("clean_sheets",),
+        "selected": ("selected", "selected_by_percent"),
+        "transfers_balance": ("transfers_balance",),
+    }
+    for feature in feature_columns:
+        if feature in completed:
+            continue
+        base = feature.split("_lag1", 1)[0].split("_mean", 1)[0]
+        source = next((candidate for candidate in source_aliases.get(base, ()) if candidate in completed), None)
+        if source is not None:
+            completed[feature] = pd.to_numeric(completed[source], errors="coerce").fillna(0.0)
+        else:
+            completed[feature] = 0.0
+    return completed

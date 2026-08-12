@@ -1,6 +1,7 @@
 """Small, tabular prediction models used as the first learned baseline."""
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -69,6 +70,41 @@ class BoostedTreePredictor:
             "expected_minutes": expected_minutes,
             "expected_points": expected_points,
         }, index=rows.index)
+
+    def save(self, path: str | Path, *, metadata: dict[str, object] | None = None) -> None:
+        """Persist the fitted predictor and its feature schema."""
+        if self.play_model is None or self.minutes_model is None or self.points_model is None:
+            raise RuntimeError("Cannot save an unfitted predictor.")
+        import joblib
+
+        destination = Path(path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump({
+            "version": 1,
+            "feature_columns": self.feature_columns,
+            "random_state": self.random_state,
+            "play_model": self.play_model,
+            "minutes_model": self.minutes_model,
+            "points_model": self.points_model,
+            "metadata": metadata or {},
+        }, destination)
+
+    @classmethod
+    def load(cls, path: str | Path) -> "BoostedTreePredictor":
+        """Load and validate a persisted predictor artifact."""
+        import joblib
+
+        artifact = joblib.load(Path(path))
+        required = {"version", "feature_columns", "random_state", "play_model", "minutes_model", "points_model"}
+        missing = required - set(artifact)
+        if missing or artifact.get("version") != 1:
+            raise ValueError("Invalid or unsupported predictor artifact.")
+        predictor = cls(random_state=int(artifact["random_state"]))
+        predictor.feature_columns = list(artifact["feature_columns"])
+        predictor.play_model = artifact["play_model"]
+        predictor.minutes_model = artifact["minutes_model"]
+        predictor.points_model = artifact["points_model"]
+        return predictor
 
 
 def _numeric_features(frame: pd.DataFrame, columns: list[str]) -> pd.DataFrame:

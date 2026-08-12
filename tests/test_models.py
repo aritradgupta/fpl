@@ -29,3 +29,14 @@ def test_boosted_tree_predictor_returns_components():
 def test_predict_requires_fit():
     with pytest.raises(RuntimeError, match="fitted"):
         BoostedTreePredictor().predict(pd.DataFrame())
+
+
+def test_predictor_artifact_round_trip(tmp_path):
+    dataset = build_next_gameweek_dataset(_training_rows(), history_windows=(2,))
+    model = BoostedTreePredictor().fit(dataset)
+    path = tmp_path / "model.joblib"
+    model.save(path, metadata={"test": True})
+    loaded = BoostedTreePredictor.load(path)
+    expected = model.predict(dataset.iloc[-2:])
+    actual = loaded.predict(dataset.iloc[-2:])
+    pd.testing.assert_frame_equal(expected, actual)

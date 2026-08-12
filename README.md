@@ -178,6 +178,28 @@ gameweek frame must contain point-in-time `id`, `position`, `team`, `cost`, and
 end-of-season team or price metadata: that leaks future information into the
 historical decision.
 
+### Train and Use the Learned Projection Model
+
+Train an artifact from a causal training CSV:
+
+```powershell
+uv run python scripts/train_model.py `
+  --input data/training/season.csv `
+  --output data/models/fpl_predictor.joblib
+```
+
+The recommendation CLI remains heuristic by default. To opt into the blended
+learned projection policy:
+
+```powershell
+uv run python scripts/recommend_squad.py `
+  --model learned `
+  --model-path data/models/fpl_predictor.joblib
+```
+
+If the artifact is missing, invalid, or incompatible, the CLI reports the
+problem and falls back to heuristic projections.
+
 ### Run Static Type Checker (`mypy`)
 
 ```bash

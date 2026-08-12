@@ -46,3 +46,17 @@ def test_adapter_falls_back_without_features_or_when_model_fails():
         stats, fixture, feature_row={"total_points_lag1": 4.0}
     )
     assert actual == expected
+
+
+def test_adapter_completes_runtime_feature_schema():
+    class SchemaModel:
+        feature_columns = ["minutes_lag1", "total_points_mean3", "GW"]
+
+        def predict(self, rows: pd.DataFrame) -> pd.DataFrame:
+            assert {"minutes_lag1", "total_points_mean3", "GW"}.issubset(rows.columns)
+            return pd.DataFrame({"expected_minutes": [90.0], "expected_points": [8.0]}, index=rows.index)
+
+    projection = ModelBackedProjectionAdapter(SchemaModel()).project(
+        _stats(), feature_row={"minutes": 1000, "total_points": 50, "GW": 1}
+    )
+    assert projection.expected_minutes == 90.0

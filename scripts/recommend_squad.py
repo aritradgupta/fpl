@@ -26,8 +26,9 @@ from rich.table import Table
 
 from fpl.client import FPLClient
 from fpl.data import load_players_df_from_db, sync_bootstrap_to_db
+from fpl.modeling.models import BoostedTreePredictor
 from fpl.models.squad import SolverType
-from fpl.optimizer import optimize_squad
+from fpl.optimizer import ModelBackedProjectionAdapter, optimize_squad
 
 console = Console(width=120)
 
@@ -42,6 +43,8 @@ async def generate_recommendation(
     lock_players: list[str] | None = None,
     exclude_players: list[str] | None = None,
     gameweek: int = 1,
+    projection_model: str = "heuristic",
+    model_path: str | None = None,
 ):
     console.print(
         Panel(
@@ -73,6 +76,17 @@ async def generate_recommendation(
         fixtures_df = None
         console.print(f"  [yellow]⚠ Unable to fetch fixtures ({exc}); using neutral fixture fallback.[/yellow]\n")
 
+    projection_adapter = None
+    if projection_model == "learned":
+        if not model_path:
+            console.print("  [yellow]⚠ Learned mode requested without --model-path; using heuristic projections.[/yellow]")
+        else:
+            try:
+                projection_adapter = ModelBackedProjectionAdapter(BoostedTreePredictor.load(model_path))
+                console.print(f"  [green]✓ Loaded learned projection model from {model_path}.[/green]")
+            except (FileNotFoundError, OSError, ValueError, RuntimeError) as exc:
+                console.print(f"  [yellow]⚠ Unable to load learned model ({exc}); using heuristic projections.[/yellow]")
+
     # 3. Run selected solver strategy
     squad_rec = optimize_squad(
         players_df,
@@ -87,6 +101,7 @@ async def generate_recommendation(
         exclude_players=exclude_players,
         fixtures_df=fixtures_df,
         gameweek=gameweek,
+        projection_adapter=projection_adapter,
     )
 
     # 4. Print 15-Man Squad Summary Table
@@ -159,6 +174,14 @@ def main():
     parser.add_argument("--horizon", type=int, default=3, help="Horizon weeks count for multi-period solver")
     parser.add_argument("--gameweek", type=int, default=1, help="First gameweek to project")
     parser.add_argument(
+        "--model",
+        dest="projection_model",
+        choices=["heuristic", "learned"],
+        default="heuristic",
+        help="Projection policy; heuristic is the safe default",
+    )
+    parser.add_argument("--model-path", help="Persisted predictor artifact for --model learned")
+    parser.add_argument(
         "--lock", type=str, nargs="*", help="Lock specific player name(s) into squad (e.g. --lock Haaland)"
     )
     parser.add_argument("--exclude", type=str, nargs="*", help="Exclude specific player name(s) from squad")
@@ -175,6 +198,8 @@ def main():
             lock_players=args.lock,
             exclude_players=args.exclude,
             gameweek=args.gameweek,
+            projection_model=args.projection_model,
+            model_path=args.model_path,
         )
     )
 
