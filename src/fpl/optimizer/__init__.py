@@ -16,6 +16,7 @@ from fpl.optimizer.expected_points import (
 )
 from fpl.optimizer.genetic import optimize_genetic_squad
 from fpl.optimizer.horizon import optimize_multi_period_plan
+from fpl.optimizer.model_adapter import ModelBackedProjectionAdapter
 from fpl.optimizer.multi_period import optimize_multi_period_squad
 from fpl.optimizer.single_period import optimize_single_period_squad, optimize_starting_xi_and_bench
 from fpl.optimizer.solver import (
@@ -48,4 +49,5 @@ __all__ = [
     "optimize_starting_xi_and_bench",
     "optimize_starting_xi",
     "optimize_transfers",
+    "ModelBackedProjectionAdapter",
 ]

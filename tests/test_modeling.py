@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from fpl.modeling.backtest import evaluate_predictions
+from fpl.modeling.backtest import blend_predictions, chronological_split, evaluate_predictions
 from fpl.modeling.features import build_next_gameweek_dataset
 
 
@@ -37,3 +37,18 @@ def test_backtest_metrics_and_empty_input():
 
     with pytest.raises(ValueError, match="empty"):
         evaluate_predictions(pd.Series(dtype=float), pd.Series(dtype=float))
+
+
+def test_chronological_split_keeps_latest_periods_for_test():
+    dataset = pd.DataFrame({"season_x": ["s"] * 5, "GW": [1, 2, 3, 4, 5]})
+    train, test = chronological_split(dataset, holdout_gameweeks=2)
+    assert train["GW"].tolist() == [1, 2, 3]
+    assert test["GW"].tolist() == [4, 5]
+
+
+def test_blend_predictions_validates_weight_and_index():
+    learned = pd.Series([10.0, 2.0], index=[1, 2])
+    fallback = pd.Series([6.0, 4.0], index=[1, 2])
+    assert blend_predictions(learned, fallback, learned_weight=0.25).tolist() == [7.0, 3.5]
+    with pytest.raises(ValueError, match="between"):
+        blend_predictions(learned, fallback, learned_weight=1.5)

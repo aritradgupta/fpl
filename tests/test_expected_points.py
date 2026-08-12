@@ -99,6 +99,22 @@ def test_project_player_xp_breakdown():
     assert proj.total_xp > 5.0
 
 
+def test_project_player_xp_accepts_minutes_override():
+    stats = PlayerStats(
+        id=5,
+        web_name="Rotation",
+        position=Position.MID,
+        team="Arsenal",
+        cost=6.0,
+        minutes=3000,
+        total_points=100,
+        points_per_game=4.0,
+    )
+    projection = project_player_xp(stats, expected_minutes_override=20.0)
+    assert projection.expected_minutes == 20.0
+    assert projection.appearance_xp == 1.0
+
+
 def test_fixture_enrichment_handles_blank_and_double_gameweeks():
     players = pd.DataFrame([
         {

@@ -125,12 +125,18 @@ def calculate_fixture_multiplier(fixture: FixtureContext) -> float:
 def project_player_xp(
     stats: PlayerStats,
     fixture: FixtureContext | None = None,
+    *,
+    expected_minutes_override: float | None = None,
 ) -> PlayerProjection:
     """Compute full multi-component Expected Points (xP) projection for a player."""
     if fixture is None:
         fixture = FixtureContext(event_id=1, opponent_team_id=0, fdr=3, is_home=True)
 
-    expected_mins = calculate_expected_minutes(stats)
+    expected_mins = (
+        calculate_expected_minutes(stats)
+        if expected_minutes_override is None
+        else min(90.0, max(0.0, float(expected_minutes_override)))
+    )
 
     if expected_mins >= 60.0:
         appearance_xp = 2.0
