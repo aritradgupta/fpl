@@ -10,6 +10,8 @@ from fpl.modeling.backtest import (
 )
 from fpl.modeling.features import build_next_gameweek_dataset, prediction_feature_columns
 from fpl.modeling.models import BoostedTreePredictor, PlayerPrediction
+from fpl.modeling.snapshot_join import join_snapshot_outcomes
+from fpl.modeling.snapshots import load_snapshots, save_snapshots, snapshot_from_bootstrap, validate_snapshot
 
 __all__ = [
     "BacktestResult",
@@ -22,4 +24,9 @@ __all__ = [
     "evaluate_predictions",
     "prediction_feature_columns",
     "run_model_backtest",
+    "load_snapshots",
+    "join_snapshot_outcomes",
+    "save_snapshots",
+    "snapshot_from_bootstrap",
+    "validate_snapshot",
 ]
