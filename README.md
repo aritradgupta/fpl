@@ -143,6 +143,9 @@ Open your browser to:
 - **Interactive Swagger Docs**: `http://127.0.0.1:8000/docs`
 - **List Players**: `http://127.0.0.1:8000/players`
 - **Squad Recommendation**: `http://127.0.0.1:8000/recommend/squad`
+- **Interactive Solver Lab**: `http://127.0.0.1:8000/lab`
+
+The Solver Lab runs the selected single-period, multi-period, stochastic, and genetic solvers over the same cached player pool and official fixture snapshot. It reports runtime, status, projected points, cost, captain, and selected player IDs side by side. A failed solver is reported independently so one experimental strategy does not hide the others' results.
 
 ---
 

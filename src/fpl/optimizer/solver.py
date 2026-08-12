@@ -50,6 +50,8 @@ def optimize_squad(
     exclude_players: list[str | int] | None = None,
     fixtures_df: pd.DataFrame | None = None,
     gameweek: int = 1,
+    num_scenarios: int = 1000,
+    use_gpu: bool = True,
 ) -> SquadRecommendation:
     """
     Select an optimal 15-player FPL squad using the specified solver strategy.
@@ -83,6 +85,8 @@ def optimize_squad(
             exclude_players=exclude_players,
             fixtures_df=fixtures_df,
             gameweek=gameweek,
+            num_scenarios=num_scenarios,
+            use_gpu=use_gpu,
         )
     if solver_type == SolverType.GENETIC:
         return optimize_genetic_squad(

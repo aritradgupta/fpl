@@ -2,12 +2,21 @@
 FastAPI Routes for FPL Team Creator Application.
 """
 
+import asyncio
 from contextlib import suppress
+from time import perf_counter
+from typing import Any
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException, Query, status
+from fastapi.responses import HTMLResponse
 
+from fpl.api.lab_html import SOLVER_LAB_HTML
 from fpl.api.schemas import (
+    SolverLabPlayer,
+    SolverLabRequest,
+    SolverLabResponse,
+    SolverLabResult,
     SquadRecommendRequest,
     SquadRecommendResponse,
     SyncResponse,
@@ -32,6 +41,25 @@ client = FPLClient()
 async def health_check():
     """Verify application status."""
     return {"status": "ok", "app": "FPL Team Creator Recommendation System"}
+
+
+@router.get("/lab", response_class=HTMLResponse, include_in_schema=False)
+async def solver_lab() -> HTMLResponse:
+    """Serve the interactive solver comparison page."""
+    return HTMLResponse(SOLVER_LAB_HTML)
+
+
+@router.get("/lab/players", include_in_schema=False)
+async def solver_lab_players() -> list[dict[str, Any]]:
+    """Return compact player options for the Solver Lab selectors."""
+    df = await load_players_df_from_db()
+    if df.empty:
+        data = await client.get_bootstrap_static()
+        await sync_bootstrap_to_db(data)
+        df = await load_players_df_from_db()
+    columns = ["id", "web_name", "position", "team", "cost"]
+    records = df[columns].sort_values(["position", "web_name"]).to_dict("records")
+    return [{str(key): value for key, value in record.items()} for record in records]
 
 
 @router.post("/sync", response_model=SyncResponse, summary="Sync Live FPL API Data")
@@ -203,3 +231,87 @@ async def recommend_transfers(req: TransferRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Transfer optimization failed: {str(e)}",
         ) from e
+
+
+async def _run_lab_case(
+    solver_type: SolverType,
+    req: SolverLabRequest,
+    players_df: pd.DataFrame,
+    fixtures_df: pd.DataFrame | None,
+) -> SolverLabResult:
+    """Run one CPU/GPU solver case without blocking the async event loop."""
+    started = perf_counter()
+    try:
+        recommendation = await asyncio.to_thread(
+            optimize_squad,
+            players_df,
+            budget=req.budget,
+            club_limit=req.club_limit,
+            chip=req.chip,
+            solver_type=solver_type,
+            horizon_weeks=req.horizon_weeks,
+            risk_aversion=req.risk_aversion,
+            num_scenarios=req.num_scenarios,
+            use_gpu=req.use_gpu,
+            generations=req.generations,
+            population_size=req.population_size,
+            seed=req.seed,
+            lock_players=[str(player_id) for player_id in req.lock_player_ids],
+            exclude_players=[str(player_id) for player_id in req.exclude_player_ids],
+            fixtures_df=fixtures_df,
+            gameweek=req.gameweek,
+        )
+        return SolverLabResult(
+            solver=solver_type,
+            status="ok",
+            runtime_seconds=round(perf_counter() - started, 3),
+            total_expected_points=recommendation.total_expected_points,
+            total_cost=recommendation.total_cost,
+            captain=recommendation.captain.web_name,
+            squad_player_ids=sorted(
+                player.projection.player_id for player in recommendation.starting_xi + recommendation.bench
+            ),
+            players=[
+                SolverLabPlayer(
+                    player_id=selected.projection.player_id,
+                    name=selected.projection.web_name,
+                    position=selected.projection.position,
+                    team=selected.projection.team,
+                    cost=selected.projection.cost,
+                    role=selected.role.value,
+                )
+                for selected in recommendation.starting_xi + recommendation.bench
+            ],
+        )
+    except Exception as exc:
+        return SolverLabResult(
+            solver=solver_type,
+            status="failed",
+            runtime_seconds=round(perf_counter() - started, 3),
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+@router.post("/lab/run", response_model=SolverLabResponse, summary="Compare Solver Strategies")
+async def run_solver_lab(req: SolverLabRequest) -> SolverLabResponse:
+    """Run selected solvers over the same cached players and fixture snapshot."""
+    players_df = await load_players_df_from_db()
+    if players_df.empty:
+        data = await client.get_bootstrap_static()
+        await sync_bootstrap_to_db(data)
+        players_df = await load_players_df_from_db()
+
+    fixtures_df: pd.DataFrame | None = None
+    with suppress(Exception):
+        fixtures_df = pd.DataFrame(await client.get_fixtures())
+        if fixtures_df.empty:
+            fixtures_df = None
+
+    results = await asyncio.gather(
+        *(_run_lab_case(solver, req, players_df, fixtures_df) for solver in req.solver_types)
+    )
+    return SolverLabResponse(
+        results=list(results),
+        fixture_rows=0 if fixtures_df is None else len(fixtures_df),
+        player_count=len(players_df),
+    )

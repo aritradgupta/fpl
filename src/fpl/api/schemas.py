@@ -95,3 +95,57 @@ class SyncResponse(BaseModel):
 
     status: str
     total_players_synced: int
+
+
+class SolverLabRequest(BaseModel):
+    """Configuration for comparing multiple solver strategies."""
+
+    solver_types: list[SolverType] = Field(
+        default_factory=lambda: list(SolverType), min_length=1, description="Solver strategies to execute"
+    )
+    budget: float = Field(default=100.0, ge=50.0, le=120.0)
+    club_limit: int = Field(default=3, ge=1, le=5)
+    gameweek: int = Field(default=1, ge=1, le=50)
+    horizon_weeks: int = Field(default=3, ge=1, le=10)
+    chip: ChipType = ChipType.NONE
+    risk_aversion: float = Field(default=0.15, ge=0.0, le=2.0)
+    num_scenarios: int = Field(default=500, ge=10, le=10000)
+    use_gpu: bool = True
+    generations: int = Field(default=50, ge=1, le=500)
+    population_size: int = Field(default=60, ge=10, le=1000)
+    seed: int | None = 42
+    lock_player_ids: list[int] = Field(default_factory=list, max_length=15)
+    exclude_player_ids: list[int] = Field(default_factory=list)
+
+
+class SolverLabPlayer(BaseModel):
+    """Compact player row shown in the solver comparison UI."""
+
+    player_id: int
+    name: str
+    position: Position
+    team: str
+    cost: float
+    role: str
+
+
+class SolverLabResult(BaseModel):
+    """One solver execution result, including failures for side-by-side comparison."""
+
+    solver: SolverType
+    status: str
+    runtime_seconds: float
+    total_expected_points: float | None = None
+    total_cost: float | None = None
+    captain: str | None = None
+    squad_player_ids: list[int] = Field(default_factory=list)
+    players: list[SolverLabPlayer] = Field(default_factory=list)
+    error: str | None = None
+
+
+class SolverLabResponse(BaseModel):
+    """Comparison response for the solver lab."""
+
+    results: list[SolverLabResult]
+    fixture_rows: int
+    player_count: int
