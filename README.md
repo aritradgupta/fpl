@@ -180,11 +180,11 @@ historical decision.
 
 ### Train and Use the Learned Projection Model
 
-Train an artifact from a causal training CSV:
+Train an artifact from either a causal training CSV or the raw merged historical CSV:
 
 ```powershell
 uv run python scripts/train_model.py `
-  --input data/training/season.csv `
+  --input data/historical/data/cleaned_merged_seasons.csv `
   --output data/models/fpl_predictor.joblib
 ```
 
