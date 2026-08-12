@@ -1,5 +1,6 @@
 """Point-in-time player snapshot schema and validation."""
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -54,6 +55,37 @@ def save_snapshots(snapshot: pd.DataFrame, path: str | Path) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     snapshot.to_csv(destination, index=False)
+
+
+def snapshot_archive_path(root: str | Path, season: str, gameweek: int) -> Path:
+    """Return the canonical archive path for one season/gameweek snapshot."""
+    if gameweek < 1:
+        raise ValueError("gameweek must be positive.")
+    return Path(root) / season / f"gw_{gameweek:02d}.csv"
+
+
+def archive_bootstrap_snapshot(
+    bootstrap: dict[str, object],
+    *,
+    season: str,
+    gameweek: int,
+    root: str | Path = "data/snapshots",
+    snapshot_time: str | None = None,
+    force: bool = False,
+) -> Path:
+    """Normalize and persist one bootstrap snapshot without accidental overwrite."""
+    destination = snapshot_archive_path(root, season, gameweek)
+    if destination.exists() and not force:
+        raise FileExistsError(f"Snapshot already exists: {destination}. Use force=True to replace it.")
+    timestamp = snapshot_time or datetime.now(UTC).isoformat()
+    snapshot = snapshot_from_bootstrap(
+        bootstrap,
+        season=season,
+        gameweek=gameweek,
+        snapshot_time=timestamp,
+    )
+    save_snapshots(snapshot, destination)
+    return destination
 
 
 def snapshot_from_bootstrap(

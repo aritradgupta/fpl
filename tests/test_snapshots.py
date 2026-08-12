@@ -2,7 +2,12 @@ import pandas as pd
 import pytest
 
 from fpl.modeling.snapshot_join import join_snapshot_outcomes
-from fpl.modeling.snapshots import snapshot_from_bootstrap, validate_snapshot
+from fpl.modeling.snapshots import (
+    archive_bootstrap_snapshot,
+    snapshot_archive_path,
+    snapshot_from_bootstrap,
+    validate_snapshot,
+)
 
 
 def test_snapshot_from_bootstrap_normalizes_player_pool():
@@ -54,3 +59,14 @@ def test_snapshot_join_keeps_players_without_outcome_rows():
     joined = join_snapshot_outcomes(snapshot, outcomes)
     assert joined["player_id"].tolist() == [1, 2]
     assert joined.loc[joined["player_id"] == 2, "target_points"].item() == 0.0
+
+
+def test_snapshot_archive_is_canonical_and_non_destructive(tmp_path):
+    bootstrap = {"teams": [{"id": 1, "name": "Arsenal"}], "elements": [{
+        "id": 1, "web_name": "A", "element_type": 3, "team": 1, "now_cost": 75,
+        "status": "a", "can_select": True, "can_transact": True,
+    }]}
+    path = archive_bootstrap_snapshot(bootstrap, season="s", gameweek=2, root=tmp_path, snapshot_time="t")
+    assert path == snapshot_archive_path(tmp_path, "s", 2)
+    with pytest.raises(FileExistsError, match="already exists"):
+        archive_bootstrap_snapshot(bootstrap, season="s", gameweek=2, root=tmp_path, snapshot_time="t")
