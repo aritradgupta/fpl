@@ -1,6 +1,6 @@
 import pandas as pd
 
-from fpl.optimizer.replay import replay_projection_policies
+from fpl.optimizer.replay import replay_projection_policies, validate_replay_frame
 
 
 def _pool() -> pd.DataFrame:
@@ -42,3 +42,13 @@ def test_replay_requires_projection_and_actual_columns():
         assert "blended_xp" in str(error)
     else:
         raise AssertionError("Expected missing replay column to fail")
+
+
+def test_replay_rejects_missing_point_in_time_team_metadata():
+    frame = _pool().drop(columns="team")
+    try:
+        validate_replay_frame(frame)
+    except ValueError as error:
+        assert "team" in str(error)
+    else:
+        raise AssertionError("Expected missing team metadata to fail")

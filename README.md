@@ -169,6 +169,15 @@ The Solver Lab runs the selected single-period, multi-period, stochastic, and ge
 uv run pytest tests/
 ```
 
+### Historical Solver Replay
+
+The replay harness in [`src/fpl/optimizer/replay.py`](src/fpl/optimizer/replay.py)
+compares heuristic and blended projections using the same constrained ILP. Each
+gameweek frame must contain point-in-time `id`, `position`, `team`, `cost`, and
+`actual_points` columns, plus the two forecast columns. Do not substitute
+end-of-season team or price metadata: that leaks future information into the
+historical decision.
+
 ### Run Static Type Checker (`mypy`)
 
 ```bash
